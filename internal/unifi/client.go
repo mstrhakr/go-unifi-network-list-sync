@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"strings"
 )
 
@@ -32,46 +31,28 @@ type NetworkList struct {
 type Client struct {
 	baseURL    string
 	site       string
+	apiKey     string
 	httpClient *http.Client
 }
 
-// NewClient creates a client and logs into the UniFi controller.
-func NewClient(baseURL, site, username, password string) (*Client, error) {
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return nil, fmt.Errorf("create cookie jar: %w", err)
+// NewClient creates a client that authenticates via API key.
+func NewClient(baseURL, site, apiKey string) (*Client, error) {
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key is required")
 	}
 
 	c := &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		site:    site,
+		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Jar: jar,
 			Transport: &http.Transport{
 				// UniFi controllers typically use self-signed certs
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
 		},
 	}
-
-	if err := c.login(username, password); err != nil {
-		return nil, fmt.Errorf("login: %w", err)
-	}
 	return c, nil
-}
-
-func (c *Client) login(username, password string) error {
-	payload, _ := json.Marshal(map[string]string{
-		"username": username,
-		"password": password,
-	})
-	req, err := http.NewRequest(http.MethodPost, c.baseURL+"/api/login", bytes.NewReader(payload))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	_, err = c.doRequest(req)
-	return err
 }
 
 // ListNetworkLists fetches all firewall groups (network lists) from the controller.
@@ -125,6 +106,7 @@ func (c *Client) UpdateNetworkList(nl *NetworkList) error {
 }
 
 func (c *Client) doRequest(req *http.Request) (*apiResponse, error) {
+	req.Header.Set("X-API-Key", c.apiKey)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err

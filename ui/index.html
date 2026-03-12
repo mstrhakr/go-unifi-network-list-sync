@@ -423,15 +423,10 @@
                                 <input type="text" id="ctrlSite" value="default" placeholder="default">
                             </div>
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="ctrlUsername">Username</label>
-                                <input type="text" id="ctrlUsername" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="ctrlPassword">Password</label>
-                                <input type="password" id="ctrlPassword">
-                            </div>
+                        <div class="form-group">
+                            <label for="ctrlApiKey">API Key</label>
+                            <input type="password" id="ctrlApiKey">
+                            <span class="hint">Generate in UniFi OS: Settings &rarr; System &rarr; Advanced &rarr; API Keys</span>
                         </div>
                         <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
                             <button type="button" class="btn btn-secondary btn-small" onclick="hideControllerForm()">Cancel</button>
@@ -440,7 +435,7 @@
                     </form>
                 </div>
                 <table class="logs-table" id="controllerTable">
-                    <thead><tr><th>Name</th><th>URL</th><th>Site</th><th>Username</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>URL</th><th>Site</th><th>API Key</th><th>Actions</th></tr></thead>
                     <tbody id="controllerTableBody"></tbody>
                 </table>
                 <p id="noControllersMsg" class="empty-text hidden">No controllers saved yet. Add one above.</p>
@@ -512,7 +507,7 @@
                 '<td>' + escapeHtml(c.name) + '</td>' +
                 '<td class="mono">' + escapeHtml(c.url) + '</td>' +
                 '<td>' + escapeHtml(c.site) + '</td>' +
-                '<td>' + escapeHtml(c.username) + '</td>' +
+                '<td class="mono">' + (c.api_key ? '••••••••' : '<em>not set</em>') + '</td>' +
                 '<td style="white-space:nowrap">' +
                     '<button class="btn btn-small btn-secondary" onclick="editController(' + c.id + ')">Edit</button> ' +
                     '<button class="btn btn-small btn-danger" onclick="deleteController(' + c.id + ')">Delete</button>' +
@@ -527,16 +522,15 @@
             document.getElementById('ctrlName').value = ctrl.name;
             document.getElementById('ctrlUrl').value = ctrl.url;
             document.getElementById('ctrlSite').value = ctrl.site;
-            document.getElementById('ctrlUsername').value = ctrl.username;
-            document.getElementById('ctrlPassword').value = '';
-            document.getElementById('ctrlPassword').placeholder = 'Leave blank to keep existing';
-            document.getElementById('ctrlPassword').required = false;
+            document.getElementById('ctrlApiKey').value = '';
+            document.getElementById('ctrlApiKey').placeholder = 'Leave blank to keep existing';
+            document.getElementById('ctrlApiKey').required = false;
         } else {
             document.getElementById('controllerForm').reset();
             document.getElementById('ctrlId').value = '';
             document.getElementById('ctrlSite').value = 'default';
-            document.getElementById('ctrlPassword').placeholder = '';
-            document.getElementById('ctrlPassword').required = true;
+            document.getElementById('ctrlApiKey').placeholder = '';
+            document.getElementById('ctrlApiKey').required = true;
         }
     }
 
@@ -556,11 +550,10 @@
             name: document.getElementById('ctrlName').value,
             url: document.getElementById('ctrlUrl').value,
             site: document.getElementById('ctrlSite').value || 'default',
-            username: document.getElementById('ctrlUsername').value,
-            password: document.getElementById('ctrlPassword').value,
+            api_key: document.getElementById('ctrlApiKey').value,
         };
-        if (!id && !data.password) {
-            showToast('Password is required for new controllers', 'error');
+        if (!id && !data.api_key) {
+            showToast('API Key is required for new controllers', 'error');
             return;
         }
         var url = id ? API + '/controllers/' + id : API + '/controllers';

@@ -58,7 +58,7 @@ func (h *Handler) listControllers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range ctrls {
-		ctrls[i].Password = ""
+		ctrls[i].APIKey = ""
 	}
 	if ctrls == nil {
 		ctrls = []store.Controller{}
@@ -72,7 +72,7 @@ func (h *Handler) createController(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if c.Name == "" || c.URL == "" || c.Username == "" || c.Password == "" {
+	if c.Name == "" || c.URL == "" || c.APIKey == "" {
 		writeError(w, http.StatusBadRequest, "missing required fields")
 		return
 	}
@@ -82,7 +82,7 @@ func (h *Handler) createController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.ID = id
-	c.Password = ""
+	c.APIKey = ""
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -97,7 +97,7 @@ func (h *Handler) getController(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "controller not found")
 		return
 	}
-	c.Password = ""
+	c.APIKey = ""
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -112,21 +112,21 @@ func (h *Handler) updateController(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	// If password is blank, keep existing
-	if c.Password == "" {
+	// If API key is blank, keep existing
+	if c.APIKey == "" {
 		existing, err := h.store.GetController(id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "controller not found")
 			return
 		}
-		c.Password = existing.Password
+		c.APIKey = existing.APIKey
 	}
 	c.ID = id
 	if err := h.store.UpdateController(&c); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.Password = ""
+	c.APIKey = ""
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -154,9 +154,9 @@ func (h *Handler) listNetworkLists(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "controller not found")
 		return
 	}
-	client, err := unifi.NewClient(ctrl.URL, ctrl.Site, ctrl.Username, ctrl.Password)
+	client, err := unifi.NewClient(ctrl.URL, ctrl.Site, ctrl.APIKey)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "UniFi login failed: "+err.Error())
+		writeError(w, http.StatusBadGateway, "UniFi API key invalid: "+err.Error())
 		return
 	}
 	lists, err := client.ListNetworkLists()

@@ -13,8 +13,7 @@ type Controller struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
 	URL       string `json:"url"`
-	Username  string `json:"username"`
-	Password  string `json:"password,omitempty"`
+	APIKey    string `json:"api_key,omitempty"`
 	Site      string `json:"site"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
@@ -84,8 +83,7 @@ func (s *Store) migrate() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL,
 			url TEXT NOT NULL,
-			username TEXT NOT NULL,
-			password TEXT NOT NULL,
+			api_key TEXT NOT NULL,
 			site TEXT NOT NULL DEFAULT 'default',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
@@ -123,7 +121,7 @@ func (s *Store) migrate() error {
 
 func (s *Store) ListControllers() ([]Controller, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, url, username, password, site, created_at, updated_at
+		SELECT id, name, url, api_key, site, created_at, updated_at
 		FROM controllers ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -133,7 +131,7 @@ func (s *Store) ListControllers() ([]Controller, error) {
 	var out []Controller
 	for rows.Next() {
 		var c Controller
-		if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.Username, &c.Password,
+		if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.APIKey,
 			&c.Site, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -145,9 +143,9 @@ func (s *Store) ListControllers() ([]Controller, error) {
 func (s *Store) GetController(id int64) (*Controller, error) {
 	var c Controller
 	err := s.db.QueryRow(`
-		SELECT id, name, url, username, password, site, created_at, updated_at
+		SELECT id, name, url, api_key, site, created_at, updated_at
 		FROM controllers WHERE id = ?`, id).Scan(
-		&c.ID, &c.Name, &c.URL, &c.Username, &c.Password,
+		&c.ID, &c.Name, &c.URL, &c.APIKey,
 		&c.Site, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -161,9 +159,9 @@ func (s *Store) CreateController(c *Controller) (int64, error) {
 		c.Site = "default"
 	}
 	result, err := s.db.Exec(`
-		INSERT INTO controllers (name, url, username, password, site, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		c.Name, c.URL, c.Username, c.Password, c.Site, now, now)
+		INSERT INTO controllers (name, url, api_key, site, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		c.Name, c.URL, c.APIKey, c.Site, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -173,9 +171,9 @@ func (s *Store) CreateController(c *Controller) (int64, error) {
 func (s *Store) UpdateController(c *Controller) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.Exec(`
-		UPDATE controllers SET name=?, url=?, username=?, password=?, site=?, updated_at=?
+		UPDATE controllers SET name=?, url=?, api_key=?, site=?, updated_at=?
 		WHERE id=?`,
-		c.Name, c.URL, c.Username, c.Password, c.Site, now, c.ID)
+		c.Name, c.URL, c.APIKey, c.Site, now, c.ID)
 	return err
 }
 
