@@ -48,6 +48,7 @@ func NewHandler(s *store.Store, syn *syncer.Syncer, sched *scheduler.Scheduler, 
 	mux.HandleFunc("POST /api/jobs/{id}/run", h.runJob)
 	mux.HandleFunc("GET /api/jobs/{id}/logs", h.getJobLogs)
 	mux.HandleFunc("POST /api/resolve", h.resolveHostnames)
+	mux.HandleFunc("GET /api/health", h.health)
 	mux.HandleFunc("GET /api/dns-servers", h.listDNSServers)
 	mux.HandleFunc("POST /api/dns-servers", h.createDNSServer)
 	mux.HandleFunc("GET /api/dns-servers/{id}", h.getDNSServer)
@@ -449,6 +450,10 @@ func (h *Handler) resolveHostnames(w http.ResponseWriter, r *http.Request) {
 	}
 
 	extraServers, _ := h.store.ListEnabledDNSServerAddresses()
+	if len(extraServers) == 0 {
+		writeError(w, http.StatusUnprocessableEntity, "no DNS servers configured: add at least one enabled DNS server")
+		return
+	}
 	hostIPs, err := syncer.ResolveHostnames(input.Hostnames, extraServers)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
@@ -468,6 +473,23 @@ func (h *Handler) resolveHostnames(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------- DNS Server Handlers ----------
+
+func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
+	type healthResponse struct {
+		OK      bool   `json:"ok"`
+		Message string `json:"message,omitempty"`
+	}
+	servers, err := h.store.ListEnabledDNSServerAddresses()
+	if err != nil {
+		writeJSON(w, http.StatusOK, healthResponse{OK: false, Message: "failed to query DNS servers: " + err.Error()})
+		return
+	}
+	if len(servers) == 0 {
+		writeJSON(w, http.StatusOK, healthResponse{OK: false, Message: "No enabled DNS servers configured. Scheduled syncs are disabled until at least one DNS server is enabled."})
+		return
+	}
+	writeJSON(w, http.StatusOK, healthResponse{OK: true})
+}
 
 func (h *Handler) listDNSServers(w http.ResponseWriter, r *http.Request) {
 	servers, err := h.store.ListDNSServers()

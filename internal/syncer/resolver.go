@@ -35,23 +35,26 @@ type multiResolver struct {
 	exchange      dnsExchangeFunc
 }
 
-// newMultiResolverWithExtras builds a resolver that queries extraServers first,
-// then the built-in public DNS servers (Cloudflare, Google, Quad9, OpenDNS).
-func newMultiResolverWithExtras(extraServers []string) *multiResolver {
-	servers := uniqueStrings(append(append([]string(nil), extraServers...), defaultPublicDNSServers...))
+// newMultiResolverWithServers builds a resolver that queries exactly the provided servers.
+// Returns an error if the list is empty — callers must ensure at least one server is configured.
+func newMultiResolverWithServers(servers []string) (*multiResolver, error) {
+	servers = uniqueStrings(servers)
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("no DNS servers configured: add at least one enabled DNS server")
+	}
 	return &multiResolver{
 		publicServers: servers,
 		queryTimeout:  defaultDNSQueryTimeout,
 		exchange:      exchangeDNS,
-	}
+	}, nil
 }
 
 // ResolveHostnames resolves a newline-separated list of hostnames, IPv4 addresses,
 // or IPv4 CIDR ranges into a de-duplicated set of IPv4 entries.
-// extraServers are queried first (before the built-in public resolvers); pass nil to use only the defaults.
-func ResolveHostnames(hostnamesText string, extraServers []string) (map[string]string, error) {
+// servers is the complete list of DNS server addresses to query; an empty list is an error.
+func ResolveHostnames(hostnamesText string, servers []string) (map[string]string, error) {
 	result := make(map[string]string)
-	resolver := newMultiResolverWithExtras(extraServers)
+	var resolver *multiResolver
 	lines := strings.Split(hostnamesText, "\n")
 	var errors []string
 
@@ -69,6 +72,14 @@ func ResolveHostnames(hostnamesText string, extraServers []string) (map[string]s
 		if cidr, ok := normalizeIPv4CIDR(line); ok {
 			addResolvedSource(result, cidr, line)
 			continue
+		}
+
+		if resolver == nil {
+			var err error
+			resolver, err = newMultiResolverWithServers(servers)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		ips, err := resolver.ResolveIPv4(line)

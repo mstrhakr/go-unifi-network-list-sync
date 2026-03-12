@@ -329,6 +329,10 @@
     </header>
 
     <main>
+        <div id="dnsBanner" class="hidden" style="background:var(--error-bg);border-left:4px solid var(--error);color:var(--error);padding:0.85rem 1.25rem;border-radius:var(--radius);margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+            <span id="dnsBannerMsg"></span>
+            <button class="btn btn-small btn-danger" onclick="showDNSModal()">Configure DNS Servers</button>
+        </div>
         <div id="jobList" class="job-grid"></div>
         <div id="emptyState" class="empty-state hidden">
             <h2>No sync jobs configured</h2>
@@ -461,7 +465,7 @@
                 <button class="modal-close" onclick="hideDNSModal()">&times;</button>
             </div>
             <div style="padding:1rem;">
-                <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:1rem;">Custom DNS servers are queried <strong>first</strong> (before Cloudflare, Google, Quad9, and OpenDNS). Use them for private or internal hostnames. Leave empty to use only built-in public resolvers.</p>
+                <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:1rem;">All enabled servers in this list are queried for every sync and resolve preview. The well-known public resolvers are pre-configured — remove or disable any you don't want. Add private or internal DNS servers as needed.</p>
                 <div style="display:flex;justify-content:flex-end;margin-bottom:1rem;">
                     <button class="btn btn-primary btn-small" onclick="showDNSServerForm()">+ Add DNS Server</button>
                 </div>
@@ -522,8 +526,26 @@
     const logDetailsMap = new Map();
 
     async function init() {
-        await Promise.all([loadJobs(), loadControllers()]);
+        await Promise.all([loadJobs(), loadControllers(), checkHealth()]);
         setInterval(loadJobs, 30000);
+        setInterval(checkHealth, 30000);
+    }
+
+    async function checkHealth() {
+        try {
+            const resp = await fetch(API + '/health');
+            const data = await resp.json();
+            const banner = document.getElementById('dnsBanner');
+            const msg = document.getElementById('dnsBannerMsg');
+            if (data.ok) {
+                banner.classList.add('hidden');
+            } else {
+                msg.textContent = data.message;
+                banner.classList.remove('hidden');
+            }
+        } catch (err) {
+            console.error('Health check error:', err);
+        }
     }
 
     // ---------- Controllers ----------
@@ -1100,6 +1122,7 @@
             renderDNSTable();
             hideDNSServerForm();
             showToast(id ? 'DNS server updated' : 'DNS server added', 'success');
+            checkHealth();
         } catch (err) {
             showToast(err.message, 'error');
         }
@@ -1113,6 +1136,7 @@
             await loadDNSServers();
             renderDNSTable();
             showToast('DNS server deleted', 'success');
+            checkHealth();
         } catch (err) {
             showToast(err.message, 'error');
         }

@@ -131,7 +131,7 @@ func (s *Store) migrate() error {
 	}
 	// Add skip_tls_verify to existing databases that predate this column.
 	_, _ = s.db.Exec(`ALTER TABLE controllers ADD COLUMN skip_tls_verify INTEGER NOT NULL DEFAULT 0`)
-	// Add dns_servers table for custom resolver endpoints.
+	// Add dns_servers table for resolver endpoints.
 	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS dns_servers (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
@@ -140,6 +140,26 @@ func (s *Store) migrate() error {
 		created_at TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	)`)
+	// Seed the well-known public resolvers on first run.
+	var dnsCount int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM dns_servers`).Scan(&dnsCount); err == nil && dnsCount == 0 {
+		now := time.Now().UTC().Format(time.RFC3339)
+		defaults := []struct{ name, address string }{
+			{"Cloudflare (1.1.1.1)", "1.1.1.1:53"},
+			{"Cloudflare (1.0.0.1)", "1.0.0.1:53"},
+			{"Google (8.8.8.8)", "8.8.8.8:53"},
+			{"Google (8.8.4.4)", "8.8.4.4:53"},
+			{"Quad9 (9.9.9.9)", "9.9.9.9:53"},
+			{"Quad9 (149.112.112.112)", "149.112.112.112:53"},
+			{"OpenDNS (208.67.222.222)", "208.67.222.222:53"},
+			{"OpenDNS (208.67.220.220)", "208.67.220.220:53"},
+		}
+		for _, d := range defaults {
+			_, _ = s.db.Exec(
+				`INSERT INTO dns_servers (name, address, enabled, created_at, updated_at) VALUES (?, ?, 1, ?, ?)`,
+				d.name, d.address, now, now)
+		}
+	}
 	return nil
 }
 
