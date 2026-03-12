@@ -12,7 +12,7 @@ import (
 )
 
 func TestResolveHostnames_AcceptsLiteralIPv4AndCIDR(t *testing.T) {
-	hostIPs, err := ResolveHostnames("\n# comment\n203.0.113.10\n198.51.100.0/24\n203.0.113.10 # duplicate\n")
+	hostIPs, err := ResolveHostnames("\n# comment\n203.0.113.10\n198.51.100.0/24\n203.0.113.10 # duplicate\n", nil)
 	if err != nil {
 		t.Fatalf("ResolveHostnames returned error: %v", err)
 	}

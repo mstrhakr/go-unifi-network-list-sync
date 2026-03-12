@@ -48,6 +48,11 @@ func NewHandler(s *store.Store, syn *syncer.Syncer, sched *scheduler.Scheduler, 
 	mux.HandleFunc("POST /api/jobs/{id}/run", h.runJob)
 	mux.HandleFunc("GET /api/jobs/{id}/logs", h.getJobLogs)
 	mux.HandleFunc("POST /api/resolve", h.resolveHostnames)
+	mux.HandleFunc("GET /api/dns-servers", h.listDNSServers)
+	mux.HandleFunc("POST /api/dns-servers", h.createDNSServer)
+	mux.HandleFunc("GET /api/dns-servers/{id}", h.getDNSServer)
+	mux.HandleFunc("PUT /api/dns-servers/{id}", h.updateDNSServer)
+	mux.HandleFunc("DELETE /api/dns-servers/{id}", h.deleteDNSServer)
 	mux.Handle("GET /", http.FileServer(http.FS(uiFS)))
 
 	return loggingMiddleware(mux)
@@ -443,7 +448,8 @@ func (h *Handler) resolveHostnames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hostIPs, err := syncer.ResolveHostnames(input.Hostnames)
+	extraServers, _ := h.store.ListEnabledDNSServerAddresses()
+	hostIPs, err := syncer.ResolveHostnames(input.Hostnames, extraServers)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -459,6 +465,85 @@ func (h *Handler) resolveHostnames(w http.ResponseWriter, r *http.Request) {
 		result = append(result, resolvedIP{IP: ip, Hostname: hostIPs[ip]})
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// ---------- DNS Server Handlers ----------
+
+func (h *Handler) listDNSServers(w http.ResponseWriter, r *http.Request) {
+	servers, err := h.store.ListDNSServers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if servers == nil {
+		servers = []store.DNSServer{}
+	}
+	writeJSON(w, http.StatusOK, servers)
+}
+
+func (h *Handler) createDNSServer(w http.ResponseWriter, r *http.Request) {
+	var s store.DNSServer
+	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if s.Name == "" || s.Address == "" {
+		writeError(w, http.StatusBadRequest, "name and address are required")
+		return
+	}
+	id, err := h.store.CreateDNSServer(&s)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.ID = id
+	writeJSON(w, http.StatusCreated, s)
+}
+
+func (h *Handler) getDNSServer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid DNS server ID")
+		return
+	}
+	s, err := h.store.GetDNSServer(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "DNS server not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, s)
+}
+
+func (h *Handler) updateDNSServer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid DNS server ID")
+		return
+	}
+	var s store.DNSServer
+	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	s.ID = id
+	if err := h.store.UpdateDNSServer(&s); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s)
+}
+
+func (h *Handler) deleteDNSServer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid DNS server ID")
+		return
+	}
+	if err := h.store.DeleteDNSServer(id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func parseID(r *http.Request) (int64, error) {

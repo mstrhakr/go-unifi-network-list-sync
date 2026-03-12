@@ -321,6 +321,7 @@
         <div class="header-content">
             <h1>UniFi Network List Sync</h1>
             <div style="display:flex;gap:0.5rem;">
+                <button class="btn btn-light" onclick="showDNSModal()">DNS Servers</button>
                 <button class="btn btn-light" onclick="showControllerModal()">Controllers</button>
                 <button class="btn btn-light" onclick="showJobModal()">+ New Sync Job</button>
             </div>
@@ -447,6 +448,54 @@
                     <tbody id="controllerTableBody"></tbody>
                 </table>
                 <p id="noControllersMsg" class="empty-text hidden">No controllers saved yet. Add one above.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- DNS Servers Modal -->
+    <div id="dnsModal" class="modal hidden">
+        <div class="modal-overlay" onclick="hideDNSModal()"></div>
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h2>Manage DNS Servers</h2>
+                <button class="modal-close" onclick="hideDNSModal()">&times;</button>
+            </div>
+            <div style="padding:1rem;">
+                <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:1rem;">Custom DNS servers are queried <strong>first</strong> (before Cloudflare, Google, Quad9, and OpenDNS). Use them for private or internal hostnames. Leave empty to use only built-in public resolvers.</p>
+                <div style="display:flex;justify-content:flex-end;margin-bottom:1rem;">
+                    <button class="btn btn-primary btn-small" onclick="showDNSServerForm()">+ Add DNS Server</button>
+                </div>
+                <div id="dnsFormWrap" class="hidden" style="margin-bottom:1rem;padding:1rem;background:#f8f9fa;border-radius:var(--radius);">
+                    <form id="dnsForm" onsubmit="saveDNSServer(event)">
+                        <input type="hidden" id="dnsId">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="dnsName">Label</label>
+                                <input type="text" id="dnsName" required placeholder="e.g., Internal DNS">
+                            </div>
+                            <div class="form-group">
+                                <label for="dnsAddress">Address</label>
+                                <input type="text" id="dnsAddress" required placeholder="192.168.1.53 or 192.168.1.53:5353">
+                                <span class="hint">IP or IP:port. Defaults to port 53 if omitted.</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                                <input type="checkbox" id="dnsEnabled" checked>
+                                Enabled
+                            </label>
+                        </div>
+                        <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+                            <button type="button" class="btn btn-secondary btn-small" onclick="hideDNSServerForm()">Cancel</button>
+                            <button type="submit" class="btn btn-primary btn-small">Save</button>
+                        </div>
+                    </form>
+                </div>
+                <table class="logs-table" id="dnsTable">
+                    <thead><tr><th>Label</th><th>Address</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="dnsTableBody"></tbody>
+                </table>
+                <p id="noDNSMsg" class="empty-text hidden">No custom DNS servers. Built-in public resolvers (Cloudflare, Google, Quad9, OpenDNS) are always used.</p>
             </div>
         </div>
     </div>
@@ -955,6 +1004,118 @@
         toastTimer = setTimeout(function() {
             toast.className = 'toast hidden';
         }, 3500);
+    }
+
+    // ---------- DNS Servers ----------
+
+    let dnsServers = [];
+
+    async function loadDNSServers() {
+        try {
+            const resp = await fetch(API + '/dns-servers');
+            if (!resp.ok) throw new Error('Failed to load DNS servers');
+            dnsServers = await resp.json();
+        } catch (err) {
+            console.error('Load DNS servers error:', err);
+        }
+    }
+
+    function showDNSModal() {
+        loadDNSServers().then(function() {
+            renderDNSTable();
+            hideDNSServerForm();
+            document.getElementById('dnsModal').classList.remove('hidden');
+        });
+    }
+
+    function hideDNSModal() {
+        document.getElementById('dnsModal').classList.add('hidden');
+    }
+
+    function renderDNSTable() {
+        const tbody = document.getElementById('dnsTableBody');
+        const noMsg = document.getElementById('noDNSMsg');
+        if (dnsServers.length === 0) {
+            tbody.innerHTML = '';
+            noMsg.classList.remove('hidden');
+            return;
+        }
+        noMsg.classList.add('hidden');
+        tbody.innerHTML = dnsServers.map(function(s) {
+            return '<tr>' +
+                '<td>' + escapeHtml(s.name) + '</td>' +
+                '<td class="mono">' + escapeHtml(s.address) + '</td>' +
+                '<td>' + (s.enabled ? '<span class="badge badge-success">Enabled</span>' : '<span class="badge badge-disabled">Disabled</span>') + '</td>' +
+                '<td style="white-space:nowrap">' +
+                    '<button class="btn btn-small btn-secondary" onclick="editDNSServer(' + s.id + ')">Edit</button> ' +
+                    '<button class="btn btn-small btn-danger" onclick="deleteDNSServer(' + s.id + ')">Delete</button>' +
+                '</td></tr>';
+        }).join('');
+    }
+
+    function showDNSServerForm(srv) {
+        document.getElementById('dnsFormWrap').classList.remove('hidden');
+        if (srv) {
+            document.getElementById('dnsId').value = srv.id;
+            document.getElementById('dnsName').value = srv.name;
+            document.getElementById('dnsAddress').value = srv.address;
+            document.getElementById('dnsEnabled').checked = !!srv.enabled;
+        } else {
+            document.getElementById('dnsForm').reset();
+            document.getElementById('dnsId').value = '';
+            document.getElementById('dnsEnabled').checked = true;
+        }
+    }
+
+    function hideDNSServerForm() {
+        document.getElementById('dnsFormWrap').classList.add('hidden');
+    }
+
+    function editDNSServer(id) {
+        var s = dnsServers.find(function(x) { return x.id === id; });
+        if (s) showDNSServerForm(s);
+    }
+
+    async function saveDNSServer(event) {
+        event.preventDefault();
+        var id = document.getElementById('dnsId').value;
+        var data = {
+            name: document.getElementById('dnsName').value,
+            address: document.getElementById('dnsAddress').value,
+            enabled: document.getElementById('dnsEnabled').checked,
+        };
+        var url = id ? API + '/dns-servers/' + id : API + '/dns-servers';
+        var method = id ? 'PUT' : 'POST';
+        try {
+            var resp = await fetch(url, {
+                method: method,
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data),
+            });
+            if (!resp.ok) {
+                var err = await resp.json();
+                throw new Error(err.error || 'Request failed');
+            }
+            await loadDNSServers();
+            renderDNSTable();
+            hideDNSServerForm();
+            showToast(id ? 'DNS server updated' : 'DNS server added', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    }
+
+    async function deleteDNSServer(id) {
+        if (!confirm('Delete this DNS server?')) return;
+        try {
+            var resp = await fetch(API + '/dns-servers/' + id, { method: 'DELETE' });
+            if (!resp.ok) throw new Error('Delete failed');
+            await loadDNSServers();
+            renderDNSTable();
+            showToast('DNS server deleted', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
     }
 
     document.addEventListener('DOMContentLoaded', init);

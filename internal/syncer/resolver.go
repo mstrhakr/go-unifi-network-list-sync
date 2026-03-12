@@ -35,9 +35,12 @@ type multiResolver struct {
 	exchange      dnsExchangeFunc
 }
 
-func newDefaultMultiResolver() *multiResolver {
+// newMultiResolverWithExtras builds a resolver that queries extraServers first,
+// then the built-in public DNS servers (Cloudflare, Google, Quad9, OpenDNS).
+func newMultiResolverWithExtras(extraServers []string) *multiResolver {
+	servers := uniqueStrings(append(append([]string(nil), extraServers...), defaultPublicDNSServers...))
 	return &multiResolver{
-		publicServers: append([]string(nil), defaultPublicDNSServers...),
+		publicServers: servers,
 		queryTimeout:  defaultDNSQueryTimeout,
 		exchange:      exchangeDNS,
 	}
@@ -45,9 +48,10 @@ func newDefaultMultiResolver() *multiResolver {
 
 // ResolveHostnames resolves a newline-separated list of hostnames, IPv4 addresses,
 // or IPv4 CIDR ranges into a de-duplicated set of IPv4 entries.
-func ResolveHostnames(hostnamesText string) (map[string]string, error) {
+// extraServers are queried first (before the built-in public resolvers); pass nil to use only the defaults.
+func ResolveHostnames(hostnamesText string, extraServers []string) (map[string]string, error) {
 	result := make(map[string]string)
-	resolver := newDefaultMultiResolver()
+	resolver := newMultiResolverWithExtras(extraServers)
 	lines := strings.Split(hostnamesText, "\n")
 	var errors []string
 

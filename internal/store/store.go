@@ -48,6 +48,16 @@ type RunLog struct {
 	Details     string  `json:"details"`
 }
 
+// DNSServer represents a custom DNS resolver endpoint.
+type DNSServer struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Address   string `json:"address"`
+	Enabled   bool   `json:"enabled"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 // Store provides SQLite-backed persistence for sync jobs and run logs.
 type Store struct {
 	db *sql.DB
@@ -121,6 +131,15 @@ func (s *Store) migrate() error {
 	}
 	// Add skip_tls_verify to existing databases that predate this column.
 	_, _ = s.db.Exec(`ALTER TABLE controllers ADD COLUMN skip_tls_verify INTEGER NOT NULL DEFAULT 0`)
+	// Add dns_servers table for custom resolver endpoints.
+	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS dns_servers (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		address TEXT NOT NULL,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`)
 	return nil
 }
 
@@ -328,4 +347,79 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// ---------- DNSServer CRUD ----------
+
+func (s *Store) ListDNSServers() ([]DNSServer, error) {
+	rows, err := s.db.Query(`SELECT id, name, address, enabled, created_at, updated_at FROM dns_servers ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DNSServer
+	for rows.Next() {
+		var d DNSServer
+		var enabled int
+		if err := rows.Scan(&d.ID, &d.Name, &d.Address, &enabled, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, err
+		}
+		d.Enabled = enabled != 0
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetDNSServer(id int64) (*DNSServer, error) {
+	var d DNSServer
+	var enabled int
+	err := s.db.QueryRow(`SELECT id, name, address, enabled, created_at, updated_at FROM dns_servers WHERE id = ?`, id).
+		Scan(&d.ID, &d.Name, &d.Address, &enabled, &d.CreatedAt, &d.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	d.Enabled = enabled != 0
+	return &d, nil
+}
+
+func (s *Store) CreateDNSServer(d *DNSServer) (int64, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.db.Exec(
+		`INSERT INTO dns_servers (name, address, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		d.Name, d.Address, boolToInt(d.Enabled), now, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) UpdateDNSServer(d *DNSServer) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(
+		`UPDATE dns_servers SET name=?, address=?, enabled=?, updated_at=? WHERE id=?`,
+		d.Name, d.Address, boolToInt(d.Enabled), now, d.ID)
+	return err
+}
+
+func (s *Store) DeleteDNSServer(id int64) error {
+	_, err := s.db.Exec("DELETE FROM dns_servers WHERE id = ?", id)
+	return err
+}
+
+// ListEnabledDNSServerAddresses returns addresses of all enabled custom DNS servers.
+func (s *Store) ListEnabledDNSServerAddresses() ([]string, error) {
+	rows, err := s.db.Query(`SELECT address FROM dns_servers WHERE enabled = 1 ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var addrs []string
+	for rows.Next() {
+		var addr string
+		if err := rows.Scan(&addr); err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs, rows.Err()
 }

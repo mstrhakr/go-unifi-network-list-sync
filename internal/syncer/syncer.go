@@ -67,7 +67,8 @@ func (s *Syncer) Run(db *store.Store, jobID int64) SyncResult {
 }
 
 func (s *Syncer) execute(db *store.Store, job *store.SyncJob) SyncResult {
-	hostIPs, err := ResolveHostnames(job.Hostnames)
+	extraServers, _ := db.ListEnabledDNSServerAddresses()
+	hostIPs, err := ResolveHostnames(job.Hostnames, extraServers)
 	if err != nil {
 		return SyncResult{Status: "error", Message: fmt.Sprintf("DNS resolution: %v", err)}
 	}
