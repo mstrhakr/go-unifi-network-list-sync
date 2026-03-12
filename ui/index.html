@@ -175,6 +175,19 @@
             gap: 0.75rem;
         }
         form { padding: 1.5rem; }
+        .form-section {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: #fafbfc;
+        }
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--text);
+        }
         .form-group { margin-bottom: 1rem; }
         .form-group label {
             display: block;
@@ -185,6 +198,8 @@
         }
         .form-group input[type="text"],
         .form-group input[type="password"],
+        .form-group input[type="number"],
+        .form-group select,
         .form-group textarea {
             width: 100%;
             padding: 0.5rem 0.75rem;
@@ -195,10 +210,14 @@
             transition: border-color 0.2s;
         }
         .form-group input:focus,
+        .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 2px rgba(21,101,192,0.2);
+        }
+        .form-group.is-disabled {
+            opacity: 0.65;
         }
         .form-row {
             display: grid;
@@ -351,50 +370,81 @@
             </div>
             <form id="jobForm" onsubmit="saveJob(event)">
                 <input type="hidden" id="jobId">
-                <div class="form-group">
-                    <label for="jobName">Name</label>
-                    <input type="text" id="jobName" required placeholder="e.g., Grafana Synthetic Probes">
-                </div>
-                <div class="form-row">
+                <div class="form-section">
+                    <h3 class="section-title">Basic Details</h3>
                     <div class="form-group">
-                        <label for="controllerId">Controller</label>
-                        <select id="controllerId" required onchange="onControllerChange()" style="width:100%;padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
-                            <option value="">Select a controller...</option>
-                        </select>
-                        <span class="hint">Manage controllers from the header button</span>
+                        <label for="jobName">Name</label>
+                        <input type="text" id="jobName" required placeholder="e.g., Grafana Synthetic Probes">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="controllerId">Controller</label>
+                            <select id="controllerId" required onchange="onControllerChange()">
+                                <option value="">Select a controller...</option>
+                            </select>
+                            <span class="hint">Manage controllers from the header button</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="networkListId">Network List</label>
+                            <select id="networkListId" required>
+                                <option value="">Select a controller first...</option>
+                            </select>
+                            <span id="networkListHint" class="hint">Lists are fetched live from your controller</span>
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label for="networkListId">Network List</label>
-                        <select id="networkListId" required style="width:100%;padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
-                            <option value="">Select a controller first...</option>
-                        </select>
-                        <span id="networkListHint" class="hint">Lists are fetched live from your controller</span>
+                        <label for="hostnames">Hostnames / IPv4 / CIDR <small>(one per line, # for comments)</small></label>
+                        <textarea id="hostnames" rows="8" required placeholder="example1.domain.com&#10;203.0.113.10&#10;198.51.100.0/24&#10;# This is a comment"></textarea>
+                        <button type="button" class="btn btn-small btn-secondary" onclick="previewResolve()" style="margin-top:0.4rem">Preview DNS Resolution</button>
+                        <div id="resolvePreview" class="resolve-preview hidden"></div>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="hostnames">Hostnames / IPv4 / CIDR <small>(one per line, # for comments)</small></label>
-                    <textarea id="hostnames" rows="8" required placeholder="example1.domain.com&#10;203.0.113.10&#10;198.51.100.0/24&#10;# This is a comment"></textarea>
-                    <button type="button" class="btn btn-small btn-secondary" onclick="previewResolve()" style="margin-top:0.4rem">Preview DNS Resolution</button>
-                    <div id="resolvePreview" class="resolve-preview hidden"></div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="schedule">Schedule (cron expression)</label>
+                <div class="form-section">
+                    <h3 class="section-title">Schedule</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="schedulePreset">Schedule Type</label>
+                            <select id="schedulePreset" onchange="onSchedulePresetChange()">
+                                <option value="manual">Manual only</option>
+                                <option value="hourly">Hourly</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="custom">Custom cron</option>
+                            </select>
+                            <span class="hint">Choose a common schedule or use a custom cron expression.</span>
+                        </div>
+                        <div class="form-group">
+                            <label>Enabled</label>
+                            <label class="toggle">
+                                <input type="checkbox" id="enabled" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="customScheduleWrap" class="form-group hidden">
+                        <label for="schedule">Custom cron expression</label>
                         <input type="text" id="schedule" placeholder="0 */6 * * *">
-                        <span class="hint">Leave blank for manual-only. Examples: <code>0 */6 * * *</code> every 6h, <code>0 0 * * *</code> daily, <code>*/30 * * * *</code> every 30m</span>
-                    </div>
-                    <div class="form-group">
-                        <label>Enabled</label>
-                        <label class="toggle">
-                            <input type="checkbox" id="enabled" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
+                        <span class="hint">Examples: <code>0 */6 * * *</code> every 6h, <code>0 0 * * *</code> daily, <code>*/30 * * * *</code> every 30m</span>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="observedIpTtlHours">Retain observed IPs (hours)</label>
-                    <input type="number" id="observedIpTtlHours" min="1" step="1" value="168">
-                    <span class="hint">Recently observed DNS answers stay in the UniFi list for this many hours before aging out. Increase this to reduce flapping from short TTLs.</span>
+                <div class="form-section">
+                    <h3 class="section-title">IP Retention</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Retain observed IPs</label>
+                            <label class="toggle">
+                                <input type="checkbox" id="observedIpRetentionEnabled" checked onchange="onObservedIpRetentionToggle()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="hint">Keep recently resolved DNS answers in the UniFi list to reduce flapping from short TTLs.</span>
+                        </div>
+                        <div id="retentionHoursWrap" class="form-group">
+                            <label for="observedIpTtlHours">Retention window (hours)</label>
+                            <input type="number" id="observedIpTtlHours" min="1" step="1" value="168">
+                            <span class="hint">Set how long observed IPs remain eligible before they age out.</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="hideJobModal()">Cancel</button>
@@ -529,6 +579,21 @@
     let jobs = [];
     let controllers = [];
     const logDetailsMap = new Map();
+    const schedulePresets = {
+        manual: '',
+        hourly: '0 * * * *',
+        daily: '0 0 * * *',
+        weekly: '0 0 * * 0',
+        monthly: '0 0 1 * *',
+    };
+    const scheduleLabels = {
+        manual: 'Manual only',
+        hourly: 'Hourly',
+        daily: 'Daily',
+        weekly: 'Weekly',
+        monthly: 'Monthly',
+        custom: 'Custom',
+    };
 
     async function init() {
         await Promise.all([loadJobs(), loadControllers(), checkHealth()]);
@@ -753,6 +818,59 @@
         }
     }
 
+    function resolveSchedulePreset(schedule) {
+        var normalized = (schedule || '').trim();
+        if (!normalized) return 'manual';
+        for (var key in schedulePresets) {
+            if (Object.prototype.hasOwnProperty.call(schedulePresets, key) && schedulePresets[key] === normalized) {
+                return key;
+            }
+        }
+        return 'custom';
+    }
+
+    function onSchedulePresetChange() {
+        var preset = document.getElementById('schedulePreset').value;
+        var customWrap = document.getElementById('customScheduleWrap');
+        var scheduleInput = document.getElementById('schedule');
+        var isCustom = preset === 'custom';
+
+        customWrap.classList.toggle('hidden', !isCustom);
+        if (!isCustom) {
+            scheduleInput.value = schedulePresets[preset] || '';
+        }
+    }
+
+    function getScheduleValueFromForm() {
+        var preset = document.getElementById('schedulePreset').value;
+        if (preset === 'custom') {
+            return document.getElementById('schedule').value.trim();
+        }
+        return schedulePresets[preset] || '';
+    }
+
+    function scheduleDisplayHtml(schedule) {
+        var preset = resolveSchedulePreset(schedule);
+        if (preset === 'manual') {
+            return '<em>Manual only</em>';
+        }
+
+        if (preset === 'custom') {
+            return '<span class="mono">' + escapeHtml(schedule) + '</span>';
+        }
+
+        return escapeHtml(scheduleLabels[preset]) + ' <span class="mono">(' + escapeHtml(schedulePresets[preset]) + ')</span>';
+    }
+
+    function onObservedIpRetentionToggle() {
+        var enabled = document.getElementById('observedIpRetentionEnabled').checked;
+        var wrap = document.getElementById('retentionHoursWrap');
+        var input = document.getElementById('observedIpTtlHours');
+
+        input.disabled = !enabled;
+        wrap.classList.toggle('is-disabled', !enabled);
+    }
+
     // ---------- Jobs ----------
 
     async function loadJobs() {
@@ -769,21 +887,28 @@
     async function saveJob(event) {
         event.preventDefault();
         const id = document.getElementById('jobId').value;
+        const retentionEnabled = document.getElementById('observedIpRetentionEnabled').checked;
+        const observedTTLHours = retentionEnabled ? parseInt(document.getElementById('observedIpTtlHours').value, 10) : 0;
         const data = {
             name: document.getElementById('jobName').value,
             controller_id: parseInt(document.getElementById('controllerId').value, 10),
             network_list_id: document.getElementById('networkListId').value,
             hostnames: document.getElementById('hostnames').value,
-            schedule: document.getElementById('schedule').value,
-            observed_ip_ttl_hours: parseInt(document.getElementById('observedIpTtlHours').value, 10),
+            schedule: getScheduleValueFromForm(),
+            observed_ip_ttl_hours: observedTTLHours,
             enabled: document.getElementById('enabled').checked,
         };
+        const selectedSchedulePreset = document.getElementById('schedulePreset').value;
 
         if (!data.controller_id) {
             showToast('Please select a controller', 'error');
             return;
         }
-        if (!data.observed_ip_ttl_hours || data.observed_ip_ttl_hours < 1) {
+        if (selectedSchedulePreset === 'custom' && !data.schedule) {
+            showToast('Custom cron schedule cannot be blank', 'error');
+            return;
+        }
+        if (retentionEnabled && (!data.observed_ip_ttl_hours || data.observed_ip_ttl_hours < 1)) {
             showToast('Observed IP retention must be at least 1 hour', 'error');
             return;
         }
@@ -907,8 +1032,10 @@
                 '<div class="job-details">' +
                     '<div class="detail-row"><span class="detail-label">Controller</span><span class="detail-value">' + escapeHtml(job.controller_name || 'Unknown') + '</span></div>' +
                     '<div class="detail-row"><span class="detail-label">Network List</span><span class="detail-value mono">' + escapeHtml(job.network_list_id) + '</span></div>' +
-                    '<div class="detail-row"><span class="detail-label">Schedule</span><span class="detail-value">' + (job.schedule ? escapeHtml(job.schedule) : '<em>Manual only</em>') + '</span></div>' +
-                    '<div class="detail-row"><span class="detail-label">Observed IP TTL</span><span class="detail-value">' + escapeHtml(String(job.observed_ip_ttl_hours || 168)) + ' hours</span></div>' +
+                    '<div class="detail-row"><span class="detail-label">Schedule</span><span class="detail-value">' + scheduleDisplayHtml(job.schedule) + '</span></div>' +
+                    '<div class="detail-row"><span class="detail-label">IP Retention</span><span class="detail-value">' +
+                        (job.observed_ip_ttl_hours > 0 ? (escapeHtml(String(job.observed_ip_ttl_hours)) + ' hours') : '<em>Disabled</em>') +
+                    '</span></div>' +
                     (job.last_run_at ?
                         '<div class="detail-row"><span class="detail-label">Last Run</span><span class="detail-value">' + formatTime(job.last_run_at) + '</span></div>' +
                         '<div class="detail-row"><span class="detail-label">Result</span><span class="detail-value ' + resultClass + '">' + escapeHtml(lastResult) + '</span></div>'
@@ -980,8 +1107,10 @@
                 document.getElementById('jobId').value = job.id;
                 document.getElementById('jobName').value = job.name;
                 document.getElementById('hostnames').value = job.hostnames;
-                document.getElementById('schedule').value = job.schedule;
-                document.getElementById('observedIpTtlHours').value = job.observed_ip_ttl_hours || 168;
+                document.getElementById('schedule').value = job.schedule || '';
+                document.getElementById('schedulePreset').value = resolveSchedulePreset(job.schedule);
+                document.getElementById('observedIpRetentionEnabled').checked = job.observed_ip_ttl_hours > 0;
+                document.getElementById('observedIpTtlHours').value = job.observed_ip_ttl_hours > 0 ? job.observed_ip_ttl_hours : 168;
                 document.getElementById('enabled').checked = job.enabled;
                 // fetch network lists for the selected controller, then select the right one
                 onControllerChange().then(function() {
@@ -991,11 +1120,16 @@
                 title.textContent = 'New Sync Job';
                 document.getElementById('jobForm').reset();
                 document.getElementById('jobId').value = '';
+                document.getElementById('schedulePreset').value = 'manual';
+                document.getElementById('schedule').value = '';
+                document.getElementById('observedIpRetentionEnabled').checked = true;
                 document.getElementById('observedIpTtlHours').value = 168;
                 document.getElementById('enabled').checked = true;
                 document.getElementById('networkListId').innerHTML = '<option value="">Select a controller first...</option>';
             }
 
+            onSchedulePresetChange();
+            onObservedIpRetentionToggle();
             document.getElementById('resolvePreview').classList.add('hidden');
             modal.classList.remove('hidden');
         });

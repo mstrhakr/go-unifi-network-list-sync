@@ -388,7 +388,7 @@ func boolToInt(b bool) int {
 }
 
 func normalizeObservedIPTTLHours(hours int) int {
-	if hours <= 0 {
+	if hours < 0 {
 		return DefaultObservedIPTTLHours
 	}
 	return hours
@@ -523,5 +523,11 @@ func (s *Store) UpsertObservedIPs(jobID int64, hostIPs map[string]string, seenAt
 // DeleteExpiredObservedIPs removes stale observed IPs for a job.
 func (s *Store) DeleteExpiredObservedIPs(jobID int64, before string) error {
 	_, err := s.db.Exec(`DELETE FROM job_observed_ips WHERE job_id = ? AND last_seen_at < ?`, jobID, before)
+	return err
+}
+
+// DeleteObservedIPs removes all cached observed IPs for a job.
+func (s *Store) DeleteObservedIPs(jobID int64) error {
+	_, err := s.db.Exec(`DELETE FROM job_observed_ips WHERE job_id = ?`, jobID)
 	return err
 }

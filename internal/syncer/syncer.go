@@ -80,18 +80,25 @@ func (s *Syncer) execute(db *store.Store, job *store.SyncJob) SyncResult {
 	}
 
 	now := time.Now().UTC()
-	retentionCutoff := now.Add(-observedIPRetention(job)).Format(time.RFC3339)
-	if err := db.UpsertObservedIPs(job.ID, hostIPs, now.Format(time.RFC3339)); err != nil {
-		return SyncResult{Status: "error", Message: fmt.Sprintf("record observed IPs: %v", err)}
+	retention := observedIPRetention(job)
+	if retention > 0 {
+		retentionCutoff := now.Add(-retention).Format(time.RFC3339)
+		if err := db.UpsertObservedIPs(job.ID, hostIPs, now.Format(time.RFC3339)); err != nil {
+			return SyncResult{Status: "error", Message: fmt.Sprintf("record observed IPs: %v", err)}
+		}
+		if err := db.DeleteExpiredObservedIPs(job.ID, retentionCutoff); err != nil {
+			return SyncResult{Status: "error", Message: fmt.Sprintf("cleanup observed IPs: %v", err)}
+		}
+		observedIPs, err := db.ListObservedIPs(job.ID, retentionCutoff)
+		if err != nil {
+			return SyncResult{Status: "error", Message: fmt.Sprintf("load observed IPs: %v", err)}
+		}
+		hostIPs = mergeResolvedIPs(observedIPs, hostIPs)
+	} else {
+		if err := db.DeleteObservedIPs(job.ID); err != nil {
+			return SyncResult{Status: "error", Message: fmt.Sprintf("clear observed IPs: %v", err)}
+		}
 	}
-	if err := db.DeleteExpiredObservedIPs(job.ID, retentionCutoff); err != nil {
-		return SyncResult{Status: "error", Message: fmt.Sprintf("cleanup observed IPs: %v", err)}
-	}
-	observedIPs, err := db.ListObservedIPs(job.ID, retentionCutoff)
-	if err != nil {
-		return SyncResult{Status: "error", Message: fmt.Sprintf("load observed IPs: %v", err)}
-	}
-	hostIPs = mergeResolvedIPs(observedIPs, hostIPs)
 
 	ctrl, err := db.GetController(job.ControllerID)
 	if err != nil {
@@ -245,8 +252,12 @@ func mergeResolvedIPs(observed, current map[string]string) map[string]string {
 
 func observedIPRetention(job *store.SyncJob) time.Duration {
 	ttlHours := store.DefaultObservedIPTTLHours
-	if job != nil && job.ObservedIPTTLHours > 0 {
-		ttlHours = job.ObservedIPTTLHours
+	if job == nil {
+		return time.Duration(ttlHours) * time.Hour
 	}
+	if job.ObservedIPTTLHours <= 0 {
+		return 0
+	}
+	ttlHours = job.ObservedIPTTLHours
 	return time.Duration(ttlHours) * time.Hour
 }

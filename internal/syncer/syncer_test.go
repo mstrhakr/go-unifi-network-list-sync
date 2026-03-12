@@ -39,4 +39,9 @@ func TestObservedIPRetention_UsesJobSettingOrDefault(t *testing.T) {
 	if got := observedIPRetention(job); got != 12*time.Hour {
 		t.Fatalf("observedIPRetention(job) = %v, want %v", got, 12*time.Hour)
 	}
+
+	disabled := &store.SyncJob{ObservedIPTTLHours: 0}
+	if got := observedIPRetention(disabled); got != 0 {
+		t.Fatalf("observedIPRetention(disabled) = %v, want 0", got)
+	}
 }
