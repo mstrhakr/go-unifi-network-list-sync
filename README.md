@@ -51,7 +51,7 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 2. Click **+ New Sync Job**
 3. Fill in your UniFi controller details:
    - **Controller URL**: e.g., `https://192.168.1.4:8443`
-   - **Username / Password**: UniFi controller credentials
+  - **API Key**: generated in UniFi OS (`Settings -> System -> Advanced -> API Keys`)
    - **Site**: usually `default`
    - **Firewall Group ID**: find this in your UniFi console under  
      `Settings → Firewall → Groups → Edit` — copy the hex ID from the URL
@@ -90,6 +90,13 @@ go run . -addr :8080
 # Build for Linux
 GOOS=linux GOARCH=amd64 go build -o go-unifi-network-list-sync .
 ```
+
+## UniFi API Schema Reference
+
+- Local copy: `docs/reference/unifi-network-10.1.85.json`
+- Source: `https://github.com/beezly/unifi-apis/raw/refs/heads/main/unifi-network/10.1.85.json`
+
+This file is treated as the authoritative schema reference for endpoint paths and response payload shapes.
 
 ## License
 

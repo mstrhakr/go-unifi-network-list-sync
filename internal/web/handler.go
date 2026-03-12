@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ferventgeek/go-unifi-network-list-sync/internal/scheduler"
@@ -54,9 +55,12 @@ func NewHandler(s *store.Store, syn *syncer.Syncer, sched *scheduler.Scheduler, 
 
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
-	bytes  int
+	status  int
+	bytes   int
+	preview []byte
 }
+
+const errorBodyPreviewMax = 512
 
 func (rw *statusRecorder) WriteHeader(statusCode int) {
 	rw.status = statusCode
@@ -69,6 +73,13 @@ func (rw *statusRecorder) Write(b []byte) (int, error) {
 	}
 	n, err := rw.ResponseWriter.Write(b)
 	rw.bytes += n
+	if len(rw.preview) < errorBodyPreviewMax {
+		remaining := errorBodyPreviewMax - len(rw.preview)
+		if remaining > len(b) {
+			remaining = len(b)
+		}
+		rw.preview = append(rw.preview, b[:remaining]...)
+	}
 	return n, err
 }
 
@@ -94,8 +105,14 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 		switch {
 		case status >= 500:
+			if len(rec.preview) > 0 {
+				attrs = append(attrs, "response_preview", strings.TrimSpace(string(rec.preview)))
+			}
 			slog.Error("HTTP request failed", attrs...)
 		case status >= 400:
+			if len(rec.preview) > 0 {
+				attrs = append(attrs, "response_preview", strings.TrimSpace(string(rec.preview)))
+			}
 			slog.Warn("HTTP request error", attrs...)
 		default:
 			slog.Info("HTTP request", attrs...)

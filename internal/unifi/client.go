@@ -37,11 +37,76 @@ type NetworkList struct {
 
 // TrafficMatchItem represents an item in a traffic matching list.
 // For IPV4_ADDRESSES: type is IP_ADDRESS (value), SUBNET (value), or IP_ADDRESS_RANGE (start/stop).
+// For PORTS lists, value/start/stop can be numeric in API responses.
 type TrafficMatchItem struct {
 	Type  string `json:"type"`
 	Value string `json:"value,omitempty"`
 	Start string `json:"start,omitempty"`
 	Stop  string `json:"stop,omitempty"`
+}
+
+// UnmarshalJSON accepts both string and numeric scalar fields for value/start/stop.
+func (t *TrafficMatchItem) UnmarshalJSON(data []byte) error {
+	type rawTrafficMatchItem struct {
+		Type  string          `json:"type"`
+		Value json.RawMessage `json:"value"`
+		Start json.RawMessage `json:"start"`
+		Stop  json.RawMessage `json:"stop"`
+	}
+
+	var raw rawTrafficMatchItem
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	var err error
+	t.Type = raw.Type
+	t.Value, err = scalarToString(raw.Value)
+	if err != nil {
+		return fmt.Errorf("decode item.value: %w", err)
+	}
+	t.Start, err = scalarToString(raw.Start)
+	if err != nil {
+		return fmt.Errorf("decode item.start: %w", err)
+	}
+	t.Stop, err = scalarToString(raw.Stop)
+	if err != nil {
+		return fmt.Errorf("decode item.stop: %w", err)
+	}
+
+	return nil
+}
+
+func scalarToString(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 {
+		return "", nil
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if bytes.Equal(trimmed, []byte("null")) {
+		return "", nil
+	}
+
+	var s string
+	if err := json.Unmarshal(trimmed, &s); err == nil {
+		return s, nil
+	}
+
+	var n json.Number
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
+	dec.UseNumber()
+	if err := dec.Decode(&n); err == nil {
+		return n.String(), nil
+	}
+
+	var b bool
+	if err := json.Unmarshal(trimmed, &b); err == nil {
+		if b {
+			return "true", nil
+		}
+		return "false", nil
+	}
+
+	return "", fmt.Errorf("unsupported scalar type: %s", string(trimmed))
 }
 
 // networkListUpdate is the request body for creating/updating a traffic matching list.
