@@ -1,0 +1,11 @@
+time=2026-03-12T13:52:53.8362397-04:00 level=INFO source=main.go:52 msg="Logging configured" log_to_stdout=true log_to_file=true log_file=sync.log debug=true verbose=true
+time=2026-03-12T13:52:53.8399627-04:00 level=INFO source=main.go:95 msg="Server starting" addr=:9191
+time=2026-03-12T13:53:13.1914485-04:00 level=INFO source=handler.go:101 msg="HTTP request" method=GET path=/ status=200 bytes=41097 duration_ms=91 remote_addr=[::1]:65311
+time=2026-03-12T13:53:13.2304362-04:00 level=INFO source=handler.go:101 msg="HTTP request" method=GET path=/api/jobs status=200 bytes=3 duration_ms=0 remote_addr=[::1]:65311
+time=2026-03-12T13:53:13.2325977-04:00 level=INFO source=handler.go:101 msg="HTTP request" method=GET path=/api/controllers status=200 bytes=220 duration_ms=0 remote_addr=[::1]:59366
+time=2026-03-12T13:53:14.6437009-04:00 level=INFO source=handler.go:101 msg="HTTP request" method=GET path=/api/controllers status=200 bytes=220 duration_ms=0 remote_addr=[::1]:59366
+time=2026-03-12T13:53:15.8416294-04:00 level=ERROR source=handler.go:97 msg="HTTP request failed" method=GET path=/api/controllers/1/network-lists status=502 bytes=159 duration_ms=81 remote_addr=[::1]:59366
+time=2026-03-12T13:53:31.9996141-04:00 level=INFO source=handler.go:101 msg="HTTP request" method=GET path=/api/controllers status=200 bytes=220 duration_ms=0 remote_addr=[::1]:59366
+time=2026-03-12T13:53:44.1634189-04:00 level=INFO source=handler.go:101 msg="HTTP request" method=GET path=/api/jobs status=200 bytes=3 duration_ms=0 remote_addr=[::1]:59366
+time=2026-03-12T13:54:06.6848738-04:00 level=ERROR source=handler.go:97 msg="HTTP request failed" method=POST path=/api/controllers/test status=502 bytes=138 duration_ms=81 remote_addr=[::1]:59366
+time=2026-03-12T13:54:13.2416232-04:00 level=INFO source=handler.go:101 msg="HTTP request" method=GET path=/api/jobs status=200 bytes=3 duration_ms=0 remote_addr=[::1]:59366

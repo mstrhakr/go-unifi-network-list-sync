@@ -37,9 +37,12 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 |---------|----------|-----------------------|
 | `-addr` | `:8080`  | HTTP listen address   |
 | `-db`   | `sync.db`| SQLite database path  |
+| `-debug`| `false`  | Enable debug logging  |
+| `-verbose`| `false`| Enable verbose logging |
+| `-log-file`| `sync.log`| Log file path (`""` disables file logging) |
 
 ```bash
-./go-unifi-network-list-sync -addr :9090 -db /var/lib/sync/data.db
+./go-unifi-network-list-sync -addr :9090 -db /var/lib/sync/data.db -log-file ./sync.log
 ```
 
 ## Usage

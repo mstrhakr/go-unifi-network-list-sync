@@ -4,12 +4,16 @@ import (
 	"context"
 	"embed"
 	"flag"
+	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
+
+	appLog "github.com/ferventgeek/go-unifi-network-list-sync/internal/logging"
 
 	"github.com/ferventgeek/go-unifi-network-list-sync/internal/scheduler"
 	"github.com/ferventgeek/go-unifi-network-list-sync/internal/store"
@@ -23,11 +27,40 @@ var uiContent embed.FS
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	dbPath := flag.String("db", "sync.db", "SQLite database path")
+	debug := flag.Bool("debug", false, "Enable debug logs")
+	verbose := flag.Bool("verbose", false, "Enable verbose logs")
+	logFile := flag.String("log-file", "sync.log", "Log file path (empty disables file logging)")
 	flag.Parse()
+
+	logCfg := appLog.DefaultConfig()
+	logCfg.DebugEnabled = *debug
+	logCfg.VerboseEnabled = *verbose
+	if *logFile == "" {
+		logCfg.LogToFile = false
+	} else {
+		logCfg.LogToFile = true
+		logCfg.FilePath = *logFile
+	}
+
+	mgr := appLog.GetManager()
+	if err := mgr.Configure(logCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to configure logging: %v\n", err)
+		os.Exit(1)
+	}
+	defer mgr.Close()
+
+	slog.Info("Logging configured",
+		"log_to_stdout", logCfg.LogToStdout,
+		"log_to_file", logCfg.LogToFile,
+		"log_file", logCfg.FilePath,
+		"debug", logCfg.DebugEnabled,
+		"verbose", logCfg.VerboseEnabled,
+	)
 
 	db, err := store.New(*dbPath)
 	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+		slog.Error("Failed to open database", "path", *dbPath, "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
@@ -35,13 +68,15 @@ func main() {
 
 	sched := scheduler.New(db, syn)
 	if err := sched.Start(); err != nil {
-		log.Fatalf("Failed to start scheduler: %v", err)
+		slog.Error("Failed to start scheduler", "error", err)
+		os.Exit(1)
 	}
 	defer sched.Stop()
 
 	uiFS, err := fs.Sub(uiContent, "ui")
 	if err != nil {
-		log.Fatalf("Failed to load embedded UI: %v", err)
+		slog.Error("Failed to load embedded UI", "error", err)
+		os.Exit(1)
 	}
 
 	handler := web.NewHandler(db, syn, sched, uiFS)
@@ -55,21 +90,31 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	serverErr := make(chan error, 1)
 	go func() {
-		log.Printf("Server starting on %s", *addr)
+		slog.Info("Server starting", "addr", *addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			serverErr <- err
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
-	<-quit
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-	log.Println("Shutting down...")
+	select {
+	case sig := <-quit:
+		slog.Info("Shutdown signal received", "signal", sig.String())
+	case err := <-serverErr:
+		slog.Error("Server error", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Shutting down")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("Shutdown error: %v", err)
+		slog.Error("Shutdown error", "error", err)
+		return
 	}
+	slog.Info("Shutdown complete")
 }

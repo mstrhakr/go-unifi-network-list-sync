@@ -3,8 +3,10 @@ package web
 import (
 	"encoding/json"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ferventgeek/go-unifi-network-list-sync/internal/scheduler"
 	"github.com/ferventgeek/go-unifi-network-list-sync/internal/store"
@@ -47,7 +49,58 @@ func NewHandler(s *store.Store, syn *syncer.Syncer, sched *scheduler.Scheduler, 
 	mux.HandleFunc("POST /api/resolve", h.resolveHostnames)
 	mux.Handle("GET /", http.FileServer(http.FS(uiFS)))
 
-	return mux
+	return loggingMiddleware(mux)
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (rw *statusRecorder) WriteHeader(statusCode int) {
+	rw.status = statusCode
+	rw.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (rw *statusRecorder) Write(b []byte) (int, error) {
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytes += n
+	return n, err
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+
+		status := rec.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+
+		attrs := []any{
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", status,
+			"bytes", rec.bytes,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"remote_addr", r.RemoteAddr,
+		}
+
+		switch {
+		case status >= 500:
+			slog.Error("HTTP request failed", attrs...)
+		case status >= 400:
+			slog.Warn("HTTP request error", attrs...)
+		default:
+			slog.Info("HTTP request", attrs...)
+		}
+	})
 }
 
 // ---------- Controller Handlers ----------
