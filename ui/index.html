@@ -625,8 +625,9 @@
             }
             sel.innerHTML = '<option value="">Select a network list...</option>' +
                 lists.map(function(nl) {
-                    var typeLabel = nl.group_type === 'address-group' ? 'IPv4' : nl.group_type;
-                    return '<option value="' + nl._id + '">' + escapeHtml(nl.name) + ' (' + typeLabel + ', ' + nl.group_members.length + ' entries)</option>';
+                    var typeLabel = nl.type === 'IPV4_ADDRESSES' ? 'IPv4' : nl.type === 'IPV6_ADDRESSES' ? 'IPv6' : nl.type === 'PORTS' ? 'Ports' : nl.type;
+                    var itemCount = nl.items ? nl.items.length : 0;
+                    return '<option value="' + nl.id + '">' + escapeHtml(nl.name) + ' (' + typeLabel + ', ' + itemCount + ' entries)</option>';
                 }).join('');
         } catch (err) {
             sel.innerHTML = '<option value="">Error: ' + escapeHtml(err.message) + '</option>';

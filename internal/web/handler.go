@@ -58,7 +58,9 @@ func (h *Handler) listControllers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range ctrls {
-		ctrls[i].APIKey = ""
+		if ctrls[i].APIKey != "" {
+			ctrls[i].APIKey = "••••••••"
+		}
 	}
 	if ctrls == nil {
 		ctrls = []store.Controller{}
@@ -82,7 +84,7 @@ func (h *Handler) createController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.ID = id
-	c.APIKey = ""
+	c.APIKey = "••••••••"
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -97,7 +99,9 @@ func (h *Handler) getController(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "controller not found")
 		return
 	}
-	c.APIKey = ""
+	if c.APIKey != "" {
+		c.APIKey = "••••••••"
+	}
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -112,8 +116,8 @@ func (h *Handler) updateController(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	// If API key is blank, keep existing
-	if c.APIKey == "" {
+	// If API key is blank or the redacted placeholder, keep existing
+	if c.APIKey == "" || c.APIKey == "••••••••" {
 		existing, err := h.store.GetController(id)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "controller not found")
@@ -126,7 +130,7 @@ func (h *Handler) updateController(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.APIKey = ""
+	c.APIKey = "••••••••"
 	writeJSON(w, http.StatusOK, c)
 }
 

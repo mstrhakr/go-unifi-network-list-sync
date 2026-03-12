@@ -10,27 +10,52 @@ import (
 	"strings"
 )
 
-type apiResponse struct {
-	Meta struct {
-		RC  string `json:"rc"`
-		Msg string `json:"msg"`
-	} `json:"meta"`
-	Data json.RawMessage `json:"data"`
+// paginatedResponse is the wrapper for list endpoints in the integration API.
+type paginatedResponse struct {
+	Offset     int             `json:"offset"`
+	Limit      int             `json:"limit"`
+	Count      int             `json:"count"`
+	TotalCount int             `json:"totalCount"`
+	Data       json.RawMessage `json:"data"`
 }
 
-// NetworkList represents a UniFi controller network list (firewall group).
+// Site represents a UniFi site.
+type Site struct {
+	ID                string `json:"id"`
+	InternalReference string `json:"internalReference"`
+	Name              string `json:"name"`
+}
+
+// NetworkList represents a traffic matching list (the UniFi integration API
+// calls these "traffic matching lists"; the UI calls them "network lists").
 type NetworkList struct {
-	ID           string   `json:"_id"`
-	Name         string   `json:"name"`
-	GroupType    string   `json:"group_type"`
-	GroupMembers []string `json:"group_members"`
-	SiteID       string   `json:"site_id"`
+	Type  string             `json:"type"` // PORTS, IPV4_ADDRESSES, IPV6_ADDRESSES
+	ID    string             `json:"id"`
+	Name  string             `json:"name"`
+	Items []TrafficMatchItem `json:"items,omitempty"`
 }
 
-// Client is an authenticated HTTP client for the UniFi controller REST API.
+// TrafficMatchItem represents an item in a traffic matching list.
+// For IPV4_ADDRESSES: type is IP_ADDRESS (value), SUBNET (value), or IP_ADDRESS_RANGE (start/stop).
+type TrafficMatchItem struct {
+	Type  string `json:"type"`
+	Value string `json:"value,omitempty"`
+	Start string `json:"start,omitempty"`
+	Stop  string `json:"stop,omitempty"`
+}
+
+// networkListUpdate is the request body for creating/updating a traffic matching list.
+type networkListUpdate struct {
+	Type  string             `json:"type"`
+	Name  string             `json:"name"`
+	Items []TrafficMatchItem `json:"items"`
+}
+
+// Client is an authenticated HTTP client for the UniFi integration API.
 type Client struct {
 	baseURL    string
 	site       string
+	siteID     string // resolved UUID
 	apiKey     string
 	httpClient *http.Client
 }
@@ -55,81 +80,156 @@ func NewClient(baseURL, site, apiKey string) (*Client, error) {
 	return c, nil
 }
 
-// ListNetworkLists fetches all firewall groups (network lists) from the controller.
-func (c *Client) ListNetworkLists() ([]NetworkList, error) {
-	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/api/s/"+c.site+"/rest/firewallgroup", nil)
-	if err != nil {
-		return nil, err
-	}
-	apiResp, err := c.doRequest(req)
-	if err != nil {
-		return nil, err
+// resolveSiteID resolves the configured site identifier to a UUID.
+func (c *Client) resolveSiteID() (string, error) {
+	if c.siteID != "" {
+		return c.siteID, nil
 	}
 
-	var groups []NetworkList
-	if err := json.Unmarshal(apiResp.Data, &groups); err != nil {
-		return nil, fmt.Errorf("decode network lists: %w", err)
+	// If the site value already looks like a UUID, use it directly.
+	if len(c.site) == 36 && strings.Count(c.site, "-") == 4 {
+		c.siteID = c.site
+		return c.siteID, nil
 	}
-	return groups, nil
-}
 
-// GetNetworkList fetches a network list by its ID.
-func (c *Client) GetNetworkList(listID string) (*NetworkList, error) {
-	groups, err := c.ListNetworkLists()
+	body, err := c.doRequest(http.MethodGet, "/integration/v1/sites?limit=200", nil)
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("list sites: %w", err)
 	}
 
-	for i := range groups {
-		if groups[i].ID == listID {
-			return &groups[i], nil
+	var page paginatedResponse
+	if err := json.Unmarshal(body, &page); err != nil {
+		return "", fmt.Errorf("decode sites response: %w", err)
+	}
+
+	var sites []Site
+	if err := json.Unmarshal(page.Data, &sites); err != nil {
+		return "", fmt.Errorf("decode sites: %w", err)
+	}
+
+	for _, s := range sites {
+		if s.InternalReference == c.site || s.Name == c.site || s.ID == c.site {
+			c.siteID = s.ID
+			return c.siteID, nil
 		}
 	}
-	return nil, fmt.Errorf("network list %s not found", listID)
+
+	return "", fmt.Errorf("site %q not found (available: %d sites)", c.site, len(sites))
 }
 
-// UpdateNetworkList PUTs an updated network list back to the controller.
-func (c *Client) UpdateNetworkList(nl *NetworkList) error {
-	payload, err := json.Marshal(nl)
+// ListNetworkLists fetches all traffic matching lists from the controller.
+func (c *Client) ListNetworkLists() ([]NetworkList, error) {
+	siteID, err := c.resolveSiteID()
 	if err != nil {
-		return fmt.Errorf("encode network list: %w", err)
+		return nil, err
 	}
-	req, err := http.NewRequest(http.MethodPut,
-		c.baseURL+"/api/s/"+c.site+"/rest/firewallgroup/"+nl.ID,
-		bytes.NewReader(payload))
+
+	body, err := c.doRequest(http.MethodGet,
+		"/integration/v1/sites/"+siteID+"/traffic-matching-lists?limit=200", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var page paginatedResponse
+	if err := json.Unmarshal(body, &page); err != nil {
+		return nil, fmt.Errorf("decode traffic matching lists response: %w", err)
+	}
+
+	var lists []NetworkList
+	if err := json.Unmarshal(page.Data, &lists); err != nil {
+		return nil, fmt.Errorf("decode traffic matching lists: %w", err)
+	}
+	return lists, nil
+}
+
+// GetNetworkList fetches a traffic matching list by its ID.
+func (c *Client) GetNetworkList(listID string) (*NetworkList, error) {
+	siteID, err := c.resolveSiteID()
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.doRequest(http.MethodGet,
+		"/integration/v1/sites/"+siteID+"/traffic-matching-lists/"+listID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var nl NetworkList
+	if err := json.Unmarshal(body, &nl); err != nil {
+		return nil, fmt.Errorf("decode traffic matching list: %w", err)
+	}
+	return &nl, nil
+}
+
+// UpdateNetworkList PUTs an updated traffic matching list back to the controller.
+func (c *Client) UpdateNetworkList(nl *NetworkList) error {
+	siteID, err := c.resolveSiteID()
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	_, err = c.doRequest(req)
+
+	update := networkListUpdate{
+		Type:  nl.Type,
+		Name:  nl.Name,
+		Items: nl.Items,
+	}
+	payload, err := json.Marshal(update)
+	if err != nil {
+		return fmt.Errorf("encode traffic matching list: %w", err)
+	}
+
+	_, err = c.doRequest(http.MethodPut,
+		"/integration/v1/sites/"+siteID+"/traffic-matching-lists/"+nl.ID, payload)
 	return err
 }
 
-func (c *Client) doRequest(req *http.Request) (*apiResponse, error) {
+func (c *Client) doRequest(method, path string, body []byte) ([]byte, error) {
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequest(method, c.baseURL+path, bodyReader)
+	if err != nil {
+		return nil, err
+	}
+
 	req.Header.Set("X-API-Key", c.apiKey)
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet := string(respBody)
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "..."
+		}
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, snippet)
 	}
 
-	var apiResp apiResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+	// If the response is HTML (e.g. a login redirect), the API key is wrong
+	// or the URL is pointing at the wrong endpoint.
+	ct := resp.Header.Get("Content-Type")
+	if strings.HasPrefix(ct, "text/html") || (len(respBody) > 0 && respBody[0] == '<') {
+		snippet := string(respBody)
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "..."
+		}
+		return nil, fmt.Errorf("controller returned HTML instead of JSON (check URL and API key): %s", snippet)
 	}
 
-	if apiResp.Meta.RC != "ok" {
-		return nil, fmt.Errorf("API error: %s", apiResp.Meta.Msg)
-	}
-
-	return &apiResp, nil
+	return respBody, nil
 }

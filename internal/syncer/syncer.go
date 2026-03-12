@@ -89,8 +89,7 @@ func (s *Syncer) execute(db *store.Store, job *store.SyncJob) SyncResult {
 	}
 
 	newIPs := SortedIPs(hostIPs)
-	oldIPs := make([]string, len(nl.GroupMembers))
-	copy(oldIPs, nl.GroupMembers)
+	oldIPs := ExtractIPsFromItems(nl.Items)
 	sort.Strings(oldIPs)
 
 	added, removed, kept := DiffIPs(oldIPs, newIPs)
@@ -102,7 +101,7 @@ func (s *Syncer) execute(db *store.Store, job *store.SyncJob) SyncResult {
 		}
 	}
 
-	nl.GroupMembers = newIPs
+	nl.Items = IPsToItems(newIPs)
 	if err := client.UpdateNetworkList(nl); err != nil {
 		return SyncResult{Status: "error", Message: fmt.Sprintf("update network list: %v", err)}
 	}
@@ -208,4 +207,29 @@ func FormatDiff(added, removed, kept []string, hostIPs map[string]string) string
 		fmt.Fprintf(&b, "  %s (%s)\n", ip, hostIPs[ip])
 	}
 	return b.String()
+}
+
+// ExtractIPsFromItems extracts IP address strings from traffic matching list items.
+func ExtractIPsFromItems(items []unifi.TrafficMatchItem) []string {
+	var ips []string
+	for _, item := range items {
+		switch item.Type {
+		case "IP_ADDRESS", "SUBNET":
+			ips = append(ips, item.Value)
+		}
+	}
+	return ips
+}
+
+// IPsToItems converts a sorted list of IPs into traffic matching list items.
+func IPsToItems(ips []string) []unifi.TrafficMatchItem {
+	items := make([]unifi.TrafficMatchItem, len(ips))
+	for i, ip := range ips {
+		if strings.Contains(ip, "/") {
+			items[i] = unifi.TrafficMatchItem{Type: "SUBNET", Value: ip}
+		} else {
+			items[i] = unifi.TrafficMatchItem{Type: "IP_ADDRESS", Value: ip}
+		}
+	}
+	return items
 }
