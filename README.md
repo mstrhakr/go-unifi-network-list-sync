@@ -10,6 +10,8 @@ Automatically resolves DNS hostnames to IPs and pushes them into UniFi controlle
 
 - **Web UI** for creating and managing sync jobs
 - **Cron scheduling** to keep firewall groups automatically updated
+- **Multi-resolver DNS lookups** across authoritative DNS plus Cloudflare, Google, Quad9, and OpenDNS
+- **Literal IPv4 and IPv4 CIDR support** in the input list for mixed hostname and direct-entry workflows
 - **DNS preview** to test hostname resolution before syncing
 - **Run history** with detailed diffs of every sync
 - **Single binary** with embedded web interface — no external dependencies
@@ -55,7 +57,7 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
    - **Site**: usually `default`
    - **Firewall Group ID**: find this in your UniFi console under  
      `Settings → Firewall → Groups → Edit` — copy the hex ID from the URL
-   - **Hostnames**: one DNS name per line (comments with `#`)
+  - **Hostnames**: one DNS name, IPv4 address, or IPv4 CIDR per line (comments with `#`)
    - **Schedule**: cron expression (e.g., `0 */6 * * *` for every 6 hours), or leave blank for manual-only
 4. Click **Save**, then **Run Now** to test
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -115,52 +114,28 @@ func (s *Syncer) execute(db *store.Store, job *store.SyncJob) SyncResult {
 	}
 }
 
-// ResolveHostnames resolves a newline-separated list of hostnames to IPv4 addresses.
-func ResolveHostnames(hostnamesText string) (map[string]string, error) {
-	result := make(map[string]string)
-	lines := strings.Split(hostnamesText, "\n")
-	var errors []string
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		ips, err := net.LookupHost(line)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", line, err))
-			continue
-		}
-		for _, ip := range ips {
-			if parsed := net.ParseIP(ip); parsed != nil && parsed.To4() != nil {
-				result[ip] = line
-			}
-		}
-	}
-
-	if len(result) == 0 {
-		errMsg := "no IPs resolved from hostname list"
-		if len(errors) > 0 {
-			errMsg += ": " + strings.Join(errors, "; ")
-		}
-		return nil, fmt.Errorf("%s", errMsg)
-	}
-	return result, nil
-}
-
-// SortedIPs returns the IPs from a host-IP map sorted numerically.
+// SortedIPs returns IPv4 addresses and IPv4 CIDRs from a host-IP map in a stable order.
 func SortedIPs(hostIPs map[string]string) []string {
 	ips := make([]string, 0, len(hostIPs))
 	for ip := range hostIPs {
 		ips = append(ips, ip)
 	}
 	sort.Slice(ips, func(i, j int) bool {
-		a := net.ParseIP(ips[i]).To4()
-		b := net.ParseIP(ips[j]).To4()
-		if a == nil || b == nil {
+		leftKey, leftPrefix, leftOK := ipSortKey(ips[i])
+		rightKey, rightPrefix, rightOK := ipSortKey(ips[j])
+		switch {
+		case leftOK && rightOK:
+			if compare := bytes.Compare(leftKey, rightKey); compare != 0 {
+				return compare < 0
+			}
+			return leftPrefix < rightPrefix
+		case leftOK:
+			return true
+		case rightOK:
+			return false
+		default:
 			return ips[i] < ips[j]
 		}
-		return bytes.Compare(a, b) < 0
 	})
 	return ips
 }
