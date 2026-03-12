@@ -35,6 +35,7 @@ func NewHandler(s *store.Store, syn *syncer.Syncer, sched *scheduler.Scheduler, 
 	mux.HandleFunc("PUT /api/controllers/{id}", h.updateController)
 	mux.HandleFunc("DELETE /api/controllers/{id}", h.deleteController)
 	mux.HandleFunc("GET /api/controllers/{id}/network-lists", h.listNetworkLists)
+	mux.HandleFunc("POST /api/controllers/test", h.testController)
 
 	mux.HandleFunc("GET /api/jobs", h.listJobs)
 	mux.HandleFunc("POST /api/jobs", h.createJob)
@@ -145,6 +146,37 @@ func (h *Handler) deleteController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) testController(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL           string `json:"url"`
+		Site          string `json:"site"`
+		APIKey        string `json:"api_key"`
+		SkipTLSVerify bool   `json:"skip_tls_verify"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if req.URL == "" || req.APIKey == "" {
+		writeError(w, http.StatusBadRequest, "url and api_key are required")
+		return
+	}
+	client, err := unifi.NewClient(req.URL, req.Site, req.APIKey, req.SkipTLSVerify)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	lists, err := client.ListNetworkLists()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":           true,
+		"network_lists": len(lists),
+	})
 }
 
 func (h *Handler) listNetworkLists(w http.ResponseWriter, r *http.Request) {

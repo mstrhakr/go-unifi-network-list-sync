@@ -56,6 +56,7 @@ type Client struct {
 	baseURL    string
 	site       string
 	siteID     string // resolved UUID
+	apiBase    string // auto-detected: /proxy/network/integration/v1 or /integration/v1
 	apiKey     string
 	httpClient *http.Client
 }
@@ -80,19 +81,54 @@ func NewClient(baseURL, site, apiKey string, skipTLSVerify bool) (*Client, error
 	return c, nil
 }
 
+// detectAPIBase probes both the UDM proxy path and the legacy path, caching the
+// one that returns valid JSON.  UDM/Dream Machine devices serve the integration
+// API at /proxy/network/integration/v1; older Cloud Key / self-hosted installs
+// use /integration/v1 directly.
+func (c *Client) detectAPIBase() (string, error) {
+	if c.apiBase != "" {
+		return c.apiBase, nil
+	}
+	candidates := []string{
+		"/proxy/network/integration/v1",
+		"/integration/v1",
+	}
+	for _, base := range candidates {
+		body, err := c.doRequest(http.MethodGet, base+"/sites?limit=1", nil)
+		if err != nil {
+			continue
+		}
+		var page paginatedResponse
+		if json.Unmarshal(body, &page) == nil {
+			c.apiBase = base
+			return c.apiBase, nil
+		}
+	}
+	return "", fmt.Errorf("could not reach integration API at %s — tried /proxy/network/integration/v1 and /integration/v1; check URL and API key", c.baseURL)
+}
+
 // resolveSiteID resolves the configured site identifier to a UUID.
 func (c *Client) resolveSiteID() (string, error) {
 	if c.siteID != "" {
 		return c.siteID, nil
 	}
 
-	// If the site value already looks like a UUID, use it directly.
+	// If the site value already looks like a UUID, use it directly but still
+	// detect the API base path so subsequent requests go to the right prefix.
 	if len(c.site) == 36 && strings.Count(c.site, "-") == 4 {
+		if _, err := c.detectAPIBase(); err != nil {
+			return "", err
+		}
 		c.siteID = c.site
 		return c.siteID, nil
 	}
 
-	body, err := c.doRequest(http.MethodGet, "/integration/v1/sites?limit=200", nil)
+	apiBase, err := c.detectAPIBase()
+	if err != nil {
+		return "", err
+	}
+
+	body, err := c.doRequest(http.MethodGet, apiBase+"/sites?limit=200", nil)
 	if err != nil {
 		return "", fmt.Errorf("list sites: %w", err)
 	}
@@ -125,7 +161,7 @@ func (c *Client) ListNetworkLists() ([]NetworkList, error) {
 	}
 
 	body, err := c.doRequest(http.MethodGet,
-		"/integration/v1/sites/"+siteID+"/traffic-matching-lists?limit=200", nil)
+		c.apiBase+"/sites/"+siteID+"/traffic-matching-lists?limit=200", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +186,7 @@ func (c *Client) GetNetworkList(listID string) (*NetworkList, error) {
 	}
 
 	body, err := c.doRequest(http.MethodGet,
-		"/integration/v1/sites/"+siteID+"/traffic-matching-lists/"+listID, nil)
+		c.apiBase+"/sites/"+siteID+"/traffic-matching-lists/"+listID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +216,7 @@ func (c *Client) UpdateNetworkList(nl *NetworkList) error {
 	}
 
 	_, err = c.doRequest(http.MethodPut,
-		"/integration/v1/sites/"+siteID+"/traffic-matching-lists/"+nl.ID, payload)
+		c.apiBase+"/sites/"+siteID+"/traffic-matching-lists/"+nl.ID, payload)
 	return err
 }
 
