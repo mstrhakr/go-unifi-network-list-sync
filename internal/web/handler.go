@@ -220,6 +220,7 @@ func (h *Handler) deleteController(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) testController(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		ControllerID  int64  `json:"controller_id"`
 		URL           string `json:"url"`
 		Site          string `json:"site"`
 		APIKey        string `json:"api_key"`
@@ -229,6 +230,30 @@ func (h *Handler) testController(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
+
+	if req.APIKey == "" {
+		if req.ControllerID == 0 {
+			writeError(w, http.StatusBadRequest, "api_key is required for new controllers")
+			return
+		}
+		existing, err := h.store.GetController(req.ControllerID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "controller not found")
+			return
+		}
+		if existing.APIKey == "" {
+			writeError(w, http.StatusBadRequest, "no saved api_key for controller")
+			return
+		}
+		req.APIKey = existing.APIKey
+		if req.URL == "" {
+			req.URL = existing.URL
+		}
+		if req.Site == "" {
+			req.Site = existing.Site
+		}
+	}
+
 	if req.URL == "" || req.APIKey == "" {
 		writeError(w, http.StatusBadRequest, "url and api_key are required")
 		return

@@ -590,12 +590,14 @@
     }
 
     async function testController() {
+        var id = document.getElementById('ctrlId').value;
         var apiKey = document.getElementById('ctrlApiKey').value;
-        if (!apiKey) {
-            showToast('Enter an API key to test', 'error');
+        if (!apiKey && !id) {
+            showToast('Enter an API key to test new controller', 'error');
             return;
         }
         var data = {
+            controller_id: id ? parseInt(id, 10) : 0,
             url: document.getElementById('ctrlUrl').value,
             site: document.getElementById('ctrlSite').value || 'default',
             api_key: apiKey,
