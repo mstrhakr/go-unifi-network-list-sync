@@ -428,6 +428,13 @@
                             <input type="password" id="ctrlApiKey">
                             <span class="hint">Generate in UniFi OS: Settings &rarr; System &rarr; Advanced &rarr; API Keys</span>
                         </div>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                                <input type="checkbox" id="ctrlSkipTls">
+                                Skip TLS certificate verification
+                            </label>
+                            <span class="hint">Enable for self-signed certificates. Not recommended for production.</span>
+                        </div>
                         <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
                             <button type="button" class="btn btn-secondary btn-small" onclick="hideControllerForm()">Cancel</button>
                             <button type="submit" class="btn btn-primary btn-small">Save Controller</button>
@@ -435,7 +442,7 @@
                     </form>
                 </div>
                 <table class="logs-table" id="controllerTable">
-                    <thead><tr><th>Name</th><th>URL</th><th>Site</th><th>API Key</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>URL</th><th>Site</th><th>API Key</th><th>Skip TLS</th><th>Actions</th></tr></thead>
                     <tbody id="controllerTableBody"></tbody>
                 </table>
                 <p id="noControllersMsg" class="empty-text hidden">No controllers saved yet. Add one above.</p>
@@ -508,6 +515,7 @@
                 '<td class="mono">' + escapeHtml(c.url) + '</td>' +
                 '<td>' + escapeHtml(c.site) + '</td>' +
                 '<td class="mono">' + (c.api_key ? '••••••••' : '<em>not set</em>') + '</td>' +
+                '<td>' + (c.skip_tls_verify ? '<span class="badge badge-warning">Yes</span>' : 'No') + '</td>' +
                 '<td style="white-space:nowrap">' +
                     '<button class="btn btn-small btn-secondary" onclick="editController(' + c.id + ')">Edit</button> ' +
                     '<button class="btn btn-small btn-danger" onclick="deleteController(' + c.id + ')">Delete</button>' +
@@ -525,12 +533,14 @@
             document.getElementById('ctrlApiKey').value = '';
             document.getElementById('ctrlApiKey').placeholder = 'Leave blank to keep existing';
             document.getElementById('ctrlApiKey').required = false;
+            document.getElementById('ctrlSkipTls').checked = !!ctrl.skip_tls_verify;
         } else {
             document.getElementById('controllerForm').reset();
             document.getElementById('ctrlId').value = '';
             document.getElementById('ctrlSite').value = 'default';
             document.getElementById('ctrlApiKey').placeholder = '';
             document.getElementById('ctrlApiKey').required = true;
+            document.getElementById('ctrlSkipTls').checked = false;
         }
     }
 
@@ -551,6 +561,7 @@
             url: document.getElementById('ctrlUrl').value,
             site: document.getElementById('ctrlSite').value || 'default',
             api_key: document.getElementById('ctrlApiKey').value,
+            skip_tls_verify: document.getElementById('ctrlSkipTls').checked,
         };
         if (!id && !data.api_key) {
             showToast('API Key is required for new controllers', 'error');

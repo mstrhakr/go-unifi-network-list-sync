@@ -78,7 +78,7 @@ func (s *Syncer) execute(db *store.Store, job *store.SyncJob) SyncResult {
 		return SyncResult{Status: "error", Message: fmt.Sprintf("load controller: %v", err)}
 	}
 
-	client, err := unifi.NewClient(ctrl.URL, ctrl.Site, ctrl.APIKey)
+	client, err := unifi.NewClient(ctrl.URL, ctrl.Site, ctrl.APIKey, ctrl.SkipTLSVerify)
 	if err != nil {
 		return SyncResult{Status: "error", Message: fmt.Sprintf("UniFi API client: %v", err)}
 	}

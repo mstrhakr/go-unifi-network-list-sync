@@ -158,7 +158,7 @@ func (h *Handler) listNetworkLists(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "controller not found")
 		return
 	}
-	client, err := unifi.NewClient(ctrl.URL, ctrl.Site, ctrl.APIKey)
+	client, err := unifi.NewClient(ctrl.URL, ctrl.Site, ctrl.APIKey, ctrl.SkipTLSVerify)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "UniFi API key invalid: "+err.Error())
 		return

@@ -61,7 +61,8 @@ type Client struct {
 }
 
 // NewClient creates a client that authenticates via API key.
-func NewClient(baseURL, site, apiKey string) (*Client, error) {
+// Set skipTLSVerify to true to disable certificate validation (for self-signed certs).
+func NewClient(baseURL, site, apiKey string, skipTLSVerify bool) (*Client, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("API key is required")
 	}
@@ -72,8 +73,7 @@ func NewClient(baseURL, site, apiKey string) (*Client, error) {
 		apiKey:  apiKey,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
-				// UniFi controllers typically use self-signed certs
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: skipTLSVerify},
 			},
 		},
 	}
