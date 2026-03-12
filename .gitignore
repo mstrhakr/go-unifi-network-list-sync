@@ -1,3 +1,4 @@
 sync.db*
 go-unifi-network-list-sync*
 *.exe
+sync.log
