@@ -174,7 +174,7 @@ func (h *Handler) testController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":           true,
+		"ok":            true,
 		"network_lists": len(lists),
 	})
 }
