@@ -329,6 +329,9 @@ func (h *Handler) createJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing required fields")
 		return
 	}
+	if job.ObservedIPTTLHours <= 0 {
+		job.ObservedIPTTLHours = store.DefaultObservedIPTTLHours
+	}
 
 	id, err := h.store.CreateJob(&job)
 	if err != nil {
@@ -369,6 +372,9 @@ func (h *Handler) updateJob(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
+	}
+	if job.ObservedIPTTLHours <= 0 {
+		job.ObservedIPTTLHours = store.DefaultObservedIPTTLHours
 	}
 
 	job.ID = id

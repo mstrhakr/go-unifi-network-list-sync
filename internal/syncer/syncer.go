@@ -79,6 +79,20 @@ func (s *Syncer) execute(db *store.Store, job *store.SyncJob) SyncResult {
 		return SyncResult{Status: "error", Message: fmt.Sprintf("DNS resolution: %v", err)}
 	}
 
+	now := time.Now().UTC()
+	retentionCutoff := now.Add(-observedIPRetention(job)).Format(time.RFC3339)
+	if err := db.UpsertObservedIPs(job.ID, hostIPs, now.Format(time.RFC3339)); err != nil {
+		return SyncResult{Status: "error", Message: fmt.Sprintf("record observed IPs: %v", err)}
+	}
+	if err := db.DeleteExpiredObservedIPs(job.ID, retentionCutoff); err != nil {
+		return SyncResult{Status: "error", Message: fmt.Sprintf("cleanup observed IPs: %v", err)}
+	}
+	observedIPs, err := db.ListObservedIPs(job.ID, retentionCutoff)
+	if err != nil {
+		return SyncResult{Status: "error", Message: fmt.Sprintf("load observed IPs: %v", err)}
+	}
+	hostIPs = mergeResolvedIPs(observedIPs, hostIPs)
+
 	ctrl, err := db.GetController(job.ControllerID)
 	if err != nil {
 		return SyncResult{Status: "error", Message: fmt.Sprintf("load controller: %v", err)}
@@ -214,4 +228,25 @@ func IPsToItems(ips []string) []unifi.TrafficMatchItem {
 		}
 	}
 	return items
+}
+
+func mergeResolvedIPs(observed, current map[string]string) map[string]string {
+	merged := make(map[string]string, len(observed)+len(current))
+	for ip, source := range observed {
+		merged[ip] = source
+	}
+	for ip, source := range current {
+		for _, part := range strings.Split(source, ", ") {
+			addResolvedSource(merged, ip, part)
+		}
+	}
+	return merged
+}
+
+func observedIPRetention(job *store.SyncJob) time.Duration {
+	ttlHours := store.DefaultObservedIPTTLHours
+	if job != nil && job.ObservedIPTTLHours > 0 {
+		ttlHours = job.ObservedIPTTLHours
+	}
+	return time.Duration(ttlHours) * time.Hour
 }

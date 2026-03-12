@@ -8,6 +8,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const DefaultObservedIPTTLHours = 7 * 24
+
 // Controller represents a saved set of UniFi controller credentials.
 type Controller struct {
 	ID            int64  `json:"id"`
@@ -22,18 +24,19 @@ type Controller struct {
 
 // SyncJob represents a configured sync job.
 type SyncJob struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	ControllerID   int64   `json:"controller_id"`
-	NetworkListID  string  `json:"network_list_id"`
-	Hostnames      string  `json:"hostnames"`
-	Schedule       string  `json:"schedule"`
-	Enabled        bool    `json:"enabled"`
-	LastRunAt      *string `json:"last_run_at"`
-	LastResult     *string `json:"last_result"`
-	CreatedAt      string  `json:"created_at"`
-	UpdatedAt      string  `json:"updated_at"`
-	ControllerName string  `json:"controller_name,omitempty"`
+	ID                 int64   `json:"id"`
+	Name               string  `json:"name"`
+	ControllerID       int64   `json:"controller_id"`
+	NetworkListID      string  `json:"network_list_id"`
+	Hostnames          string  `json:"hostnames"`
+	Schedule           string  `json:"schedule"`
+	ObservedIPTTLHours int     `json:"observed_ip_ttl_hours"`
+	Enabled            bool    `json:"enabled"`
+	LastRunAt          *string `json:"last_run_at"`
+	LastResult         *string `json:"last_result"`
+	CreatedAt          string  `json:"created_at"`
+	UpdatedAt          string  `json:"updated_at"`
+	ControllerName     string  `json:"controller_name,omitempty"`
 }
 
 // RunLog represents a single execution record for a sync job.
@@ -129,6 +132,7 @@ func (s *Store) migrate() error {
 	if err != nil {
 		return err
 	}
+	_, _ = s.db.Exec(`ALTER TABLE sync_jobs ADD COLUMN observed_ip_ttl_hours INTEGER NOT NULL DEFAULT 168`)
 	// Add skip_tls_verify to existing databases that predate this column.
 	_, _ = s.db.Exec(`ALTER TABLE controllers ADD COLUMN skip_tls_verify INTEGER NOT NULL DEFAULT 0`)
 	// Add dns_servers table for resolver endpoints.
@@ -139,6 +143,16 @@ func (s *Store) migrate() error {
 		enabled INTEGER NOT NULL DEFAULT 1,
 		created_at TEXT NOT NULL,
 		updated_at TEXT NOT NULL
+	)`)
+	// Cache recently observed DNS answers per job so short-lived rotations do not cause firewall flapping.
+	_, _ = s.db.Exec(`CREATE TABLE IF NOT EXISTS job_observed_ips (
+		job_id INTEGER NOT NULL,
+		ip TEXT NOT NULL,
+		source TEXT NOT NULL,
+		first_seen_at TEXT NOT NULL,
+		last_seen_at TEXT NOT NULL,
+		PRIMARY KEY (job_id, ip),
+		FOREIGN KEY (job_id) REFERENCES sync_jobs(id) ON DELETE CASCADE
 	)`)
 	// Seed the well-known public resolvers on first run.
 	var dnsCount int
@@ -233,7 +247,7 @@ func (s *Store) DeleteController(id int64) error {
 func (s *Store) ListJobs() ([]SyncJob, error) {
 	rows, err := s.db.Query(`
 		SELECT j.id, j.name, j.controller_id, j.network_list_id,
-			j.hostnames, j.schedule, j.enabled,
+				j.hostnames, j.schedule, j.observed_ip_ttl_hours, j.enabled,
 			j.last_run_at, j.last_result, j.created_at, j.updated_at,
 			COALESCE(c.name, '')
 		FROM sync_jobs j
@@ -249,11 +263,12 @@ func (s *Store) ListJobs() ([]SyncJob, error) {
 		var j SyncJob
 		var enabled int
 		if err := rows.Scan(&j.ID, &j.Name, &j.ControllerID, &j.NetworkListID,
-			&j.Hostnames, &j.Schedule, &enabled,
+			&j.Hostnames, &j.Schedule, &j.ObservedIPTTLHours, &enabled,
 			&j.LastRunAt, &j.LastResult, &j.CreatedAt, &j.UpdatedAt,
 			&j.ControllerName); err != nil {
 			return nil, err
 		}
+		j.ObservedIPTTLHours = normalizeObservedIPTTLHours(j.ObservedIPTTLHours)
 		j.Enabled = enabled != 0
 		jobs = append(jobs, j)
 	}
@@ -265,31 +280,33 @@ func (s *Store) GetJob(id int64) (*SyncJob, error) {
 	var enabled int
 	err := s.db.QueryRow(`
 		SELECT j.id, j.name, j.controller_id, j.network_list_id,
-			j.hostnames, j.schedule, j.enabled,
+				j.hostnames, j.schedule, j.observed_ip_ttl_hours, j.enabled,
 			j.last_run_at, j.last_result, j.created_at, j.updated_at,
 			COALESCE(c.name, '')
 		FROM sync_jobs j
 		LEFT JOIN controllers c ON c.id = j.controller_id
 		WHERE j.id = ?`, id).Scan(
 		&j.ID, &j.Name, &j.ControllerID, &j.NetworkListID,
-		&j.Hostnames, &j.Schedule, &enabled,
+		&j.Hostnames, &j.Schedule, &j.ObservedIPTTLHours, &enabled,
 		&j.LastRunAt, &j.LastResult, &j.CreatedAt, &j.UpdatedAt,
 		&j.ControllerName)
 	if err != nil {
 		return nil, err
 	}
+	j.ObservedIPTTLHours = normalizeObservedIPTTLHours(j.ObservedIPTTLHours)
 	j.Enabled = enabled != 0
 	return &j, nil
 }
 
 func (s *Store) CreateJob(j *SyncJob) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
+	j.ObservedIPTTLHours = normalizeObservedIPTTLHours(j.ObservedIPTTLHours)
 	result, err := s.db.Exec(`
 		INSERT INTO sync_jobs (name, controller_id, network_list_id,
-			hostnames, schedule, enabled, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			hostnames, schedule, observed_ip_ttl_hours, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		j.Name, j.ControllerID, j.NetworkListID,
-		j.Hostnames, j.Schedule, boolToInt(j.Enabled),
+		j.Hostnames, j.Schedule, j.ObservedIPTTLHours, boolToInt(j.Enabled),
 		now, now)
 	if err != nil {
 		return 0, err
@@ -299,12 +316,13 @@ func (s *Store) CreateJob(j *SyncJob) (int64, error) {
 
 func (s *Store) UpdateJob(j *SyncJob) error {
 	now := time.Now().UTC().Format(time.RFC3339)
+	j.ObservedIPTTLHours = normalizeObservedIPTTLHours(j.ObservedIPTTLHours)
 	_, err := s.db.Exec(`
 		UPDATE sync_jobs SET name=?, controller_id=?, network_list_id=?,
-			hostnames=?, schedule=?, enabled=?, updated_at=?
+			hostnames=?, schedule=?, observed_ip_ttl_hours=?, enabled=?, updated_at=?
 		WHERE id=?`,
 		j.Name, j.ControllerID, j.NetworkListID,
-		j.Hostnames, j.Schedule,
+		j.Hostnames, j.Schedule, j.ObservedIPTTLHours,
 		boolToInt(j.Enabled), now, j.ID)
 	return err
 }
@@ -367,6 +385,13 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+func normalizeObservedIPTTLHours(hours int) int {
+	if hours <= 0 {
+		return DefaultObservedIPTTLHours
+	}
+	return hours
 }
 
 // ---------- DNSServer CRUD ----------
@@ -442,4 +467,61 @@ func (s *Store) ListEnabledDNSServerAddresses() ([]string, error) {
 		addrs = append(addrs, addr)
 	}
 	return addrs, rows.Err()
+}
+
+// ListObservedIPs returns recently observed IPs for a job and their source labels.
+func (s *Store) ListObservedIPs(jobID int64, since string) (map[string]string, error) {
+	rows, err := s.db.Query(`
+		SELECT ip, source
+		FROM job_observed_ips
+		WHERE job_id = ? AND last_seen_at >= ?
+		ORDER BY ip`, jobID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]string)
+	for rows.Next() {
+		var ip string
+		var source string
+		if err := rows.Scan(&ip, &source); err != nil {
+			return nil, err
+		}
+		out[ip] = source
+	}
+	return out, rows.Err()
+}
+
+// UpsertObservedIPs records the most recent successful resolution set for a job.
+func (s *Store) UpsertObservedIPs(jobID int64, hostIPs map[string]string, seenAt string) error {
+	if len(hostIPs) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for ip, source := range hostIPs {
+		if _, err := tx.Exec(`
+			INSERT INTO job_observed_ips (job_id, ip, source, first_seen_at, last_seen_at)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(job_id, ip) DO UPDATE SET
+				source = excluded.source,
+				last_seen_at = excluded.last_seen_at`,
+			jobID, ip, source, seenAt, seenAt); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// DeleteExpiredObservedIPs removes stale observed IPs for a job.
+func (s *Store) DeleteExpiredObservedIPs(jobID int64, before string) error {
+	_, err := s.db.Exec(`DELETE FROM job_observed_ips WHERE job_id = ? AND last_seen_at < ?`, jobID, before)
+	return err
 }
