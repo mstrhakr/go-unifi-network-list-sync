@@ -17,14 +17,40 @@ type Scheduler struct {
 	cron    *cron.Cron
 	entries map[int64]cron.EntryID
 	mu      sync.Mutex
+	workQ   chan int64
+	stopQ   chan struct{}
 }
 
 func New(s *store.Store, syn *syncer.Syncer) *Scheduler {
-	return &Scheduler{
+	sch := &Scheduler{
 		store:   s,
 		syncer:  syn,
 		cron:    cron.New(),
 		entries: make(map[int64]cron.EntryID),
+		workQ:   make(chan int64, 256),
+		stopQ:   make(chan struct{}),
+	}
+	go sch.worker()
+	return sch
+}
+
+// worker drains the work queue sequentially, preventing concurrent DB writes.
+func (s *Scheduler) worker() {
+	for {
+		select {
+		case jobID := <-s.workQ:
+			s.syncer.Run(s.store, jobID)
+		case <-s.stopQ:
+			// drain remaining queued jobs before exiting
+			for {
+				select {
+				case jobID := <-s.workQ:
+					s.syncer.Run(s.store, jobID)
+				default:
+					return
+				}
+			}
+		}
 	}
 }
 
@@ -45,10 +71,11 @@ func (s *Scheduler) Start() error {
 	return nil
 }
 
-// Stop gracefully shuts down the cron runner.
+// Stop gracefully shuts down the cron runner and the work queue worker.
 func (s *Scheduler) Stop() {
 	ctx := s.cron.Stop()
 	<-ctx.Done()
+	close(s.stopQ)
 }
 
 // Reload re-reads a job from the store and updates its cron entry.
@@ -86,7 +113,12 @@ func (s *Scheduler) Remove(jobID int64) {
 func (s *Scheduler) scheduleJob(job store.SyncJob) {
 	jobID := job.ID
 	entryID, err := s.cron.AddFunc(job.Schedule, func() {
-		s.syncer.Run(s.store, jobID)
+		select {
+		case s.workQ <- jobID:
+			log.Printf("Scheduler: job %d (%s) queued", jobID, job.Name)
+		default:
+			log.Printf("Scheduler: job %d (%s) queue full, skipping trigger", jobID, job.Name)
+		}
 	})
 	if err != nil {
 		log.Printf("Scheduler: failed to schedule job %d (%s) with %q: %v",

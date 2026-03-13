@@ -48,7 +48,11 @@ func (s *Syncer) Run(db *store.Store, jobID int64) SyncResult {
 		StartedAt: now,
 		Status:    "running",
 	}
-	logID, _ := db.CreateRunLog(runLog)
+	logID, err := db.CreateRunLog(runLog)
+	if err != nil {
+		log.Printf("Job %d: failed to create run log: %v", jobID, err)
+		return SyncResult{Status: "error", Message: fmt.Sprintf("create run log: %v", err)}
+	}
 
 	result := s.execute(db, job)
 

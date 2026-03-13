@@ -995,8 +995,23 @@
         content.innerHTML = '<p class="empty-text">Loading...</p>';
         document.getElementById('logsModal').classList.remove('hidden');
 
+        // Add log limit selector
+        let limitWrap = document.getElementById('logLimitWrap');
+        if (!limitWrap) {
+            limitWrap = document.createElement('div');
+            limitWrap.id = 'logLimitWrap';
+            limitWrap.style = 'margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;';
+            limitWrap.innerHTML = '<label for="logLimit">Show last</label>' +
+                '<select id="logLimit" style="font-size:0.9rem;padding:0.2rem 0.5rem;">' +
+                [50,100,150,200].map(n => '<option value="'+n+'">'+n+'</option>').join('') + '</select> logs';
+            content.parentElement.insertBefore(limitWrap, content);
+            document.getElementById('logLimit').addEventListener('change', function() {
+                showLogs(id);
+            });
+        }
+        const limit = document.getElementById('logLimit') ? document.getElementById('logLimit').value : 50;
         try {
-            const resp = await fetch(API + '/jobs/' + id + '/logs');
+            const resp = await fetch(API + '/jobs/' + id + '/logs?limit=' + limit);
             const logs = await resp.json();
             renderLogs(logs);
         } catch (err) {
