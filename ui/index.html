@@ -219,6 +219,19 @@
         .form-group.is-disabled {
             opacity: 0.65;
         }
+        .toggle-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            min-height: 32px;
+        }
+        .toggle-title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin: 0;
+        }
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -241,7 +254,7 @@
             display: inline-block;
             width: 48px;
             height: 26px;
-            margin-top: 0.25rem;
+            margin: 0;
         }
         .toggle input { opacity: 0; width: 0; height: 0; }
         .toggle-slider {
@@ -414,12 +427,15 @@
                             </select>
                             <span class="hint">Choose a common schedule or use a custom cron expression.</span>
                         </div>
-                        <div class="form-group">
-                            <label>Enabled</label>
-                            <label class="toggle">
-                                <input type="checkbox" id="enabled" checked>
-                                <span class="toggle-slider"></span>
-                            </label>
+                        <div id="scheduleEnabledWrap" class="form-group">
+                            <div class="toggle-field">
+                                <label class="toggle-title" for="enabled">Scheduled Runs Enabled</label>
+                                <label class="toggle">
+                                    <input type="checkbox" id="enabled" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <span class="hint">Only affects automatic cron execution. Manual "Run Now" remains available.</span>
                         </div>
                     </div>
                     <div id="customScheduleWrap" class="form-group hidden">
@@ -432,11 +448,13 @@
                     <h3 class="section-title">IP Retention</h3>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Retain observed IPs</label>
-                            <label class="toggle">
-                                <input type="checkbox" id="observedIpRetentionEnabled" checked onchange="onObservedIpRetentionToggle()">
-                                <span class="toggle-slider"></span>
-                            </label>
+                            <div class="toggle-field">
+                                <label class="toggle-title" for="observedIpRetentionEnabled">Retain observed IPs</label>
+                                <label class="toggle">
+                                    <input type="checkbox" id="observedIpRetentionEnabled" checked onchange="onObservedIpRetentionToggle()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
                             <span class="hint">Keep recently resolved DNS answers in the UniFi list to reduce flapping from short TTLs.</span>
                         </div>
                         <div id="retentionHoursWrap" class="form-group">
@@ -832,12 +850,19 @@
     function onSchedulePresetChange() {
         var preset = document.getElementById('schedulePreset').value;
         var customWrap = document.getElementById('customScheduleWrap');
+        var scheduleEnabledWrap = document.getElementById('scheduleEnabledWrap');
         var scheduleInput = document.getElementById('schedule');
+        var enabledInput = document.getElementById('enabled');
         var isCustom = preset === 'custom';
+        var isManual = preset === 'manual';
 
         customWrap.classList.toggle('hidden', !isCustom);
+        scheduleEnabledWrap.classList.toggle('hidden', isManual);
         if (!isCustom) {
             scheduleInput.value = schedulePresets[preset] || '';
+        }
+        if (isManual) {
+            enabledInput.checked = true;
         }
     }
 
@@ -849,10 +874,14 @@
         return schedulePresets[preset] || '';
     }
 
-    function scheduleDisplayHtml(schedule) {
+    function scheduleDisplayHtml(schedule, scheduleEnabled) {
         var preset = resolveSchedulePreset(schedule);
         if (preset === 'manual') {
             return '<em>Manual only</em>';
+        }
+
+        if (!scheduleEnabled) {
+            return '<em>Disabled</em>';
         }
 
         if (preset === 'custom') {
@@ -887,6 +916,8 @@
     async function saveJob(event) {
         event.preventDefault();
         const id = document.getElementById('jobId').value;
+        const selectedSchedulePreset = document.getElementById('schedulePreset').value;
+        const scheduleEnabled = selectedSchedulePreset === 'manual' ? true : document.getElementById('enabled').checked;
         const retentionEnabled = document.getElementById('observedIpRetentionEnabled').checked;
         const observedTTLHours = retentionEnabled ? parseInt(document.getElementById('observedIpTtlHours').value, 10) : 0;
         const data = {
@@ -896,9 +927,8 @@
             hostnames: document.getElementById('hostnames').value,
             schedule: getScheduleValueFromForm(),
             observed_ip_ttl_hours: observedTTLHours,
-            enabled: document.getElementById('enabled').checked,
+            enabled: scheduleEnabled,
         };
-        const selectedSchedulePreset = document.getElementById('schedulePreset').value;
 
         if (!data.controller_id) {
             showToast('Please select a controller', 'error');
@@ -1021,18 +1051,25 @@
             const isSuccess = lastResult.startsWith('success');
             const isError = lastResult.startsWith('error');
             const resultClass = isSuccess ? 'text-success' : isError ? 'text-error' : '';
+            const schedulePreset = resolveSchedulePreset(job.schedule);
+            const scheduleStatusText = schedulePreset === 'manual'
+                ? 'Manual'
+                : (job.enabled ? 'Scheduled' : 'Schedule Off');
+            const scheduleStatusClass = schedulePreset === 'manual'
+                ? 'badge-warning'
+                : (job.enabled ? 'badge-success' : 'badge-disabled');
 
             return '<div class="job-card">' +
                 '<div class="job-header">' +
                     '<h3>' + escapeHtml(job.name) + '</h3>' +
-                    '<span class="badge ' + (job.enabled ? 'badge-success' : 'badge-disabled') + '">' +
-                        (job.enabled ? 'Enabled' : 'Disabled') +
+                    '<span class="badge ' + scheduleStatusClass + '">' +
+                        scheduleStatusText +
                     '</span>' +
                 '</div>' +
                 '<div class="job-details">' +
                     '<div class="detail-row"><span class="detail-label">Controller</span><span class="detail-value">' + escapeHtml(job.controller_name || 'Unknown') + '</span></div>' +
                     '<div class="detail-row"><span class="detail-label">Network List</span><span class="detail-value mono">' + escapeHtml(job.network_list_id) + '</span></div>' +
-                    '<div class="detail-row"><span class="detail-label">Schedule</span><span class="detail-value">' + scheduleDisplayHtml(job.schedule) + '</span></div>' +
+                    '<div class="detail-row"><span class="detail-label">Schedule</span><span class="detail-value">' + scheduleDisplayHtml(job.schedule, !!job.enabled) + '</span></div>' +
                     '<div class="detail-row"><span class="detail-label">IP Retention</span><span class="detail-value">' +
                         (job.observed_ip_ttl_hours > 0 ? (escapeHtml(String(job.observed_ip_ttl_hours)) + ' hours') : '<em>Disabled</em>') +
                     '</span></div>' +
