@@ -35,12 +35,12 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ### Options
 
-| Flag    | Default  | Description           |
-|---------|----------|-----------------------|
-| `-addr` | `:8080`  | HTTP listen address   |
-| `-db`   | `sync.db`| SQLite database path  |
-| `-debug`| `false`  | Enable debug logging  |
-| `-verbose`| `false`| Enable verbose logging |
+| Flag       | Default   | Description                                |
+|------------|-----------|--------------------------------------------|
+| `-addr`    | `:8080`   | HTTP listen address                        |
+| `-db`      | `sync.db` | SQLite database path                       |
+| `-debug`   | `false`   | Enable debug logging                       |
+| `-verbose` | `false`   | Enable verbose logging                     |
 | `-log-file`| `sync.log`| Log file path (`""` disables file logging) |
 
 ```bash
@@ -52,13 +52,15 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 1. Open the web UI
 2. Click **+ New Sync Job**
 3. Fill in your UniFi controller details:
+
    - **Controller URL**: e.g., `https://192.168.1.4:8443`
-  - **API Key**: generated in UniFi OS (`Settings -> System -> Advanced -> API Keys`)
+   - **API Key**: generated in UniFi OS (`Settings -> System -> Advanced -> API Keys`)
    - **Site**: usually `default`
    - **Firewall Group ID**: find this in your UniFi console under  
-     `Settings → Firewall → Groups → Edit` — copy the hex ID from the URL
-  - **Hostnames**: one DNS name, IPv4 address, or IPv4 CIDR per line (comments with `#`)
+      `Settings → Firewall → Groups → Edit` — copy the hex ID from the URL
+   - **Hostnames**: one DNS name, IPv4 address, or IPv4 CIDR per line (comments with `#`)
    - **Schedule**: cron expression (e.g., `0 */6 * * *` for every 6 hours), or leave blank for manual-only
+
 4. Click **Save**, then **Run Now** to test
 
 ## API Endpoints
