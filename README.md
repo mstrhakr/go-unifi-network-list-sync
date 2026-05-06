@@ -42,6 +42,7 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 | `-debug`   | `false`   | Enable debug logging                       |
 | `-verbose` | `false`   | Enable verbose logging                     |
 | `-log-file`| `sync.log`| Log file path (`""` disables file logging) |
+| `-version` | `false`   | Print build version metadata and exit      |
 
 ```bash
 ./go-unifi-network-list-sync -addr :9090 -db /var/lib/sync/data.db -log-file ./sync.log
@@ -94,6 +95,48 @@ go run . -addr :8080
 # Build for Linux
 GOOS=linux GOARCH=amd64 go build -o go-unifi-network-list-sync .
 ```
+
+## CI/CD And Release Structure
+
+### Workflows
+
+- `CI` workflow (`.github/workflows/ci.yml`): runs on every pull request and push to `main`, and executes `go vet ./...`, `go test ./...`, and a regular build.
+- `Release` workflow (`.github/workflows/release.yml`): runs when a tag like `v1.2.3` (or `v1.2.3-rc.1`) is pushed, and uses GoReleaser to build and publish GitHub Release artifacts.
+
+### Versioning Policy (SemVer)
+
+- Use `MAJOR.MINOR.PATCH` tags prefixed with `v`
+- `v1.4.0` for new backward-compatible features
+- `v1.4.1` for fixes
+- `v2.0.0` for breaking changes
+- Optional prereleases are supported (for example `v1.5.0-rc.1`)
+
+### Release Artifacts
+
+GoReleaser (`.goreleaser.yaml`) produces:
+
+- `linux`, `darwin`, and `windows` binaries
+- `amd64` and `arm64` builds
+- `.tar.gz` archives (and `.zip` for Windows)
+- `checksums.txt` for artifact verification
+
+Build metadata is embedded into binaries via ldflags and exposed with:
+
+```bash
+./go-unifi-network-list-sync -version
+```
+
+### Suggested Release Flow
+
+1. Merge tested changes into `main`
+1. Create and push a SemVer tag
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+1. GitHub Actions runs `Release` and publishes assets on a GitHub Release
 
 ## UniFi API Schema Reference
 

@@ -24,13 +24,25 @@ import (
 //go:embed ui
 var uiContent embed.FS
 
+var (
+	version   = "dev"
+	commit    = "none"
+	buildDate = "unknown"
+)
+
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	dbPath := flag.String("db", "sync.db", "SQLite database path")
 	debug := flag.Bool("debug", false, "Enable debug logs")
 	verbose := flag.Bool("verbose", false, "Enable verbose logs")
 	logFile := flag.String("log-file", "sync.log", "Log file path (empty disables file logging)")
+	showVersion := flag.Bool("version", false, "Print version information")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("go-unifi-network-list-sync version=%s commit=%s built=%s\n", version, commit, buildDate)
+		return
+	}
 
 	logCfg := appLog.DefaultConfig()
 	logCfg.DebugEnabled = *debug
