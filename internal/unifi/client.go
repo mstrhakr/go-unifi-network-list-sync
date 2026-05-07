@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -133,8 +134,13 @@ func NewClient(baseURL, site, apiKey string, skipTLSVerify bool) (*Client, error
 		return nil, fmt.Errorf("API key is required")
 	}
 
+	normalizedBaseURL, err := normalizeControllerBaseURL(baseURL)
+	if err != nil {
+		return nil, err
+	}
+
 	c := &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL: normalizedBaseURL,
 		site:    site,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
@@ -144,6 +150,34 @@ func NewClient(baseURL, site, apiKey string, skipTLSVerify bool) (*Client, error
 		},
 	}
 	return c, nil
+}
+
+func normalizeControllerBaseURL(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", fmt.Errorf("invalid controller URL: %w", err)
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return "", fmt.Errorf("controller URL must use http or https")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("controller URL must include a host")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("controller URL must not include credentials")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("controller URL must not include query or fragment")
+	}
+	if parsed.Path != "" && strings.Trim(parsed.Path, "/") != "" {
+		return "", fmt.Errorf("controller URL must be the controller origin only (no path)")
+	}
+
+	normalized := &url.URL{
+		Scheme: strings.ToLower(parsed.Scheme),
+		Host:   strings.ToLower(parsed.Host),
+	}
+	return normalized.String(), nil
 }
 
 // detectAPIBase probes both the UDM proxy path and the legacy path, caching the
@@ -286,6 +320,13 @@ func (c *Client) UpdateNetworkList(nl *NetworkList) error {
 }
 
 func (c *Client) doRequest(method, path string, body []byte) ([]byte, error) {
+	if !strings.HasPrefix(path, "/") {
+		return nil, fmt.Errorf("request path must start with '/'")
+	}
+	if strings.Contains(path, "://") {
+		return nil, fmt.Errorf("request path must not contain a URL scheme")
+	}
+
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)

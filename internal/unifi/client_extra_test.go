@@ -36,6 +36,25 @@ func TestNewClient_RequiresAPIKeyAndTrimsURL(t *testing.T) {
 	}
 }
 
+func TestNewClient_RejectsUnsafeOrInvalidBaseURL(t *testing.T) {
+	tests := []string{
+		"",
+		"ftp://example.com",
+		"https://user:pass@example.com",
+		"https://example.com/path",
+		"https://example.com?x=1",
+		"https://example.com/#frag",
+	}
+
+	for _, raw := range tests {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := NewClient(raw, "default", "k", false); err == nil {
+				t.Fatalf("expected error for base URL %q", raw)
+			}
+		})
+	}
+}
+
 func TestDoRequest_StatusHTMLAndSuccess(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-API-Key") == "" {
@@ -77,5 +96,19 @@ func TestDoRequest_StatusHTMLAndSuccess(t *testing.T) {
 
 	if _, err := c.doRequest(http.MethodGet, "/bad", nil); err == nil || !strings.Contains(err.Error(), "HTTP 400") {
 		t.Fatalf("doRequest(/bad) err = %v", err)
+	}
+}
+
+func TestDoRequest_RejectsNonLocalPathInputs(t *testing.T) {
+	c, err := NewClient("https://example.com", "default", "k", false)
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	if _, err := c.doRequest(http.MethodGet, "integration/v1/sites", nil); err == nil {
+		t.Fatal("expected error for path without leading slash")
+	}
+	if _, err := c.doRequest(http.MethodGet, "/https://evil.example/", nil); err == nil {
+		t.Fatal("expected error for path containing URL scheme")
 	}
 }
