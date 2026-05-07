@@ -17,21 +17,88 @@ Automatically resolves DNS hostnames to IPs and pushes them into UniFi controlle
 - **Single binary** with embedded web interface — no external dependencies
 - **SQLite** storage for jobs and logs
 
-## Quick Start
+## Why Use It
 
-### Build
+Use this when you maintain UniFi firewall/address groups that depend on hostnames whose IPs change over time.
+
+Typical examples:
+
+- Monitoring providers with rotating probe IPs
+- Third-party integrations that publish hostnames instead of fixed IPs
+- Mixed allow-lists where some entries are hostnames and others are static CIDRs
+
+Without automation, these groups drift and access breaks. This tool keeps the group aligned with current DNS results on a schedule.
+
+## How It Works
+
+1. You create a sync job in the web UI.
+2. The job stores UniFi credentials, target group ID, and hostname/CIDR inputs.
+3. On manual run or schedule, the app resolves hostnames using multiple DNS resolvers.
+4. It computes the desired final list and updates the UniFi firewall group.
+5. It stores run history so you can review diffs and failures.
+
+## Before You Start
+
+1. A reachable UniFi Network Controller URL.
+2. A UniFi API key with permission to update firewall groups.
+3. The target Site name (usually `default`).
+4. The firewall/address group ID you want to keep in sync.
+5. A host machine where Docker can keep a persistent `/data` volume.
+
+## Quick Start (Docker Preferred)
+
+### Run Latest Development Build
 
 ```bash
-go build -o go-unifi-network-list-sync .
-```
-
-### Run
-
-```bash
-./go-unifi-network-list-sync
+docker run --rm -p 8080:8080 \
+   -v unifi-sync-data:/data \
+   ghcr.io/mstrhakr/go-unifi-network-list-sync:main
 ```
 
 Open [http://localhost:8080](http://localhost:8080) in your browser.
+
+### Run A Stable Release
+
+```bash
+docker run --rm -p 8080:8080 \
+   -v unifi-sync-data:/data \
+   ghcr.io/mstrhakr/go-unifi-network-list-sync:v0.1.0
+```
+
+The image is published for `linux/amd64` and `linux/arm64`.
+
+### Image Tag Strategy
+
+- `main`: latest build from the `main` branch
+- `vMAJOR`: latest patch release in a major series
+- `vMAJOR.MINOR`: latest patch release in a minor series
+- `vMAJOR.MINOR.PATCH`: exact immutable release
+- `sha-<commit>`: commit-specific image
+
+### Data Persistence
+
+The container defaults to:
+
+- `-addr :8080`
+- `-db /data/sync.db`
+- `-log-file /data/sync.log`
+
+Use a bind mount or named volume for `/data` so DB and logs persist across upgrades.
+
+### Optional: Build The Image Locally
+
+```bash
+docker build -t go-unifi-network-list-sync:dev .
+```
+
+### Optional: Run From Binary
+
+```bash
+go build -o go-unifi-network-list-sync .
+./go-unifi-network-list-sync
+```
+
+For maintainer and contributor workflows (local dev, CI, and release process), see [docs/development.md](docs/development.md).
 
 ### Options
 
@@ -50,19 +117,54 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Usage
 
-1. Open the web UI
-2. Click **+ New Sync Job**
-3. Fill in your UniFi controller details:
+### First-Time Setup Walkthrough
 
-   - **Controller URL**: e.g., `https://192.168.1.4:8443`
-   - **API Key**: generated in UniFi OS (`Settings -> System -> Advanced -> API Keys`)
-   - **Site**: usually `default`
-   - **Firewall Group ID**: find this in your UniFi console under  
-      `Settings → Firewall → Groups → Edit` — copy the hex ID from the URL
-   - **Hostnames**: one DNS name, IPv4 address, or IPv4 CIDR per line (comments with `#`)
-   - **Schedule**: cron expression (e.g., `0 */6 * * *` for every 6 hours), or leave blank for manual-only
+1. Start the container and open the UI at [http://localhost:8080](http://localhost:8080).
+2. Click **+ New Sync Job**.
+3. Enter a clear job name, for example `grafana-probes-prod`.
+4. Set **Controller URL** to your UniFi endpoint, for example `https://192.168.1.4:8443`.
+5. Set **API Key** from UniFi OS (`Settings -> System -> Advanced -> API Keys`).
+6. Set **Site** to your UniFi site name (usually `default`).
+7. Set **Firewall Group ID** by opening the target group in UniFi and copying the hex ID from the URL.
+8. In **Hostnames**, add one entry per line.
+9. Use comments with `#` for documentation.
+10. Add a schedule such as `0 */6 * * *` for every 6 hours, or leave blank for manual runs.
+11. Click **Save**.
+12. Click **Run Now** to verify connectivity and output.
 
-4. Click **Save**, then **Run Now** to test
+Example host list:
+
+```text
+# Grafana synthetic probes
+synthetics.grafana.net
+
+# Static office egress
+203.0.113.10
+203.0.113.0/24
+```
+
+### What To Check After First Run
+
+1. The run status is successful in job history.
+2. The log shows resolved records and applied changes.
+3. The target UniFi group now contains the expected entries.
+4. A second run without DNS changes produces little or no diff.
+
+### Recommended Operations
+
+1. Start with manual runs while validating job configuration.
+2. Enable schedule only after one or two clean manual runs.
+3. Use stable tags (`vMAJOR.MINOR.PATCH`) in production.
+4. Use `main` for testing new behavior.
+5. Keep `/data` persisted so jobs and history survive container updates.
+
+### Common Failure Causes
+
+1. Invalid controller URL or TLS trust issues.
+2. API key missing required permissions.
+3. Wrong site or firewall group ID.
+4. DNS resolver/network restrictions from the container host.
+5. Container started without persistent `/data` volume.
 
 ## API Endpoints
 
@@ -85,84 +187,6 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 | `0 */6 * * *`   | Every 6 hours    |
 | `0 0 * * *`     | Daily at midnight|
 | `0 0 * * 1`     | Every Monday     |
-
-## Development
-
-```bash
-# Run in development
-go run . -addr :8080
-
-# Build for Linux
-GOOS=linux GOARCH=amd64 go build -o go-unifi-network-list-sync .
-```
-
-## Docker
-
-### Build Local Image
-
-```bash
-docker build -t go-unifi-network-list-sync:dev .
-```
-
-### Run Container
-
-```bash
-docker run --rm -p 8080:8080 \
-   -v unifi-sync-data:/data \
-   ghcr.io/mstrhakr/go-unifi-network-list-sync:main
-```
-
-The container defaults to:
-
-- `-addr :8080`
-- `-db /data/sync.db`
-- `-log-file /data/sync.log`
-
-Use a bind mount or named volume for `/data` so DB and logs persist across upgrades.
-
-## CI/CD And Release Structure
-
-### Workflows
-
-- `CI` workflow (`.github/workflows/ci.yml`): runs on every pull request and push to `main`, and executes `go vet ./...`, `go test ./...`, and a regular build.
-- `Release` workflow (`.github/workflows/release.yml`): runs when a tag like `v1.2.3` (or `v1.2.3-rc.1`) is pushed, and uses GoReleaser to build and publish GitHub Release artifacts.
-- `Container` workflow (`.github/workflows/container.yml`): runs on pushes to `main` and on published GitHub Releases, publishes multi-arch images (`linux/amd64`, `linux/arm64`) to GHCR, and tags images as `main`, `vMAJOR`, `vMAJOR.MINOR`, `vMAJOR.MINOR.PATCH`, and `sha-<commit>`.
-
-### Versioning Policy (SemVer)
-
-- Use `MAJOR.MINOR.PATCH` tags prefixed with `v`
-- `v1.4.0` for new backward-compatible features
-- `v1.4.1` for fixes
-- `v2.0.0` for breaking changes
-- Optional prereleases are supported (for example `v1.5.0-rc.1`)
-
-### Release Artifacts
-
-GoReleaser (`.goreleaser.yaml`) produces:
-
-- `linux`, `darwin`, and `windows` binaries
-- `amd64` and `arm64` builds
-- `.tar.gz` archives (and `.zip` for Windows)
-- `checksums.txt` for artifact verification
-
-Build metadata is embedded into binaries via ldflags and exposed with:
-
-```bash
-./go-unifi-network-list-sync -version
-```
-
-### Suggested Release Flow
-
-1. Merge tested changes into `main`
-1. Create and push a SemVer tag
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-1. GitHub Actions runs `Release` and publishes assets on a GitHub Release
-1. Publishing the GitHub Release triggers `Container`, which publishes GHCR image tags such as `v1`, `v1.2`, and `v1.2.3`
 
 ## UniFi API Schema Reference
 
