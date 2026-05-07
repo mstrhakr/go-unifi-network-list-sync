@@ -96,12 +96,37 @@ go run . -addr :8080
 GOOS=linux GOARCH=amd64 go build -o go-unifi-network-list-sync .
 ```
 
+## Docker
+
+### Build Local Image
+
+```bash
+docker build -t go-unifi-network-list-sync:dev .
+```
+
+### Run Container
+
+```bash
+docker run --rm -p 8080:8080 \
+   -v unifi-sync-data:/data \
+   ghcr.io/mstrhakr/go-unifi-network-list-sync:main
+```
+
+The container defaults to:
+
+- `-addr :8080`
+- `-db /data/sync.db`
+- `-log-file /data/sync.log`
+
+Use a bind mount or named volume for `/data` so DB and logs persist across upgrades.
+
 ## CI/CD And Release Structure
 
 ### Workflows
 
 - `CI` workflow (`.github/workflows/ci.yml`): runs on every pull request and push to `main`, and executes `go vet ./...`, `go test ./...`, and a regular build.
 - `Release` workflow (`.github/workflows/release.yml`): runs when a tag like `v1.2.3` (or `v1.2.3-rc.1`) is pushed, and uses GoReleaser to build and publish GitHub Release artifacts.
+- `Container` workflow (`.github/workflows/container.yml`): runs on pushes to `main` and on published GitHub Releases, publishes multi-arch images (`linux/amd64`, `linux/arm64`) to GHCR, and tags images as `main`, `vMAJOR`, `vMAJOR.MINOR`, `vMAJOR.MINOR.PATCH`, and `sha-<commit>`.
 
 ### Versioning Policy (SemVer)
 
@@ -137,6 +162,7 @@ git push origin v1.0.0
 ```
 
 1. GitHub Actions runs `Release` and publishes assets on a GitHub Release
+1. Publishing the GitHub Release triggers `Container`, which publishes GHCR image tags such as `v1`, `v1.2`, and `v1.2.3`
 
 ## UniFi API Schema Reference
 
