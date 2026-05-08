@@ -372,6 +372,58 @@
             }
         }
         .hidden { display: none !important; }
+
+        /* ---- Dark mode ---- */
+        [data-theme="dark"] {
+            --primary: #1976d2;
+            --primary-hover: #1565c0;
+            --bg: #111315;
+            --card: #1e2023;
+            --text: #e0e0e0;
+            --text-secondary: #9aa0a6;
+            --border: #2d3035;
+            --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+            --success: #81c784;
+            --success-bg: #1b3320;
+            --error: #ef9a9a;
+            --error-bg: #3b1515;
+            --warning: #ffcc80;
+            --warning-bg: #3b2600;
+        }
+        [data-theme="dark"] body { background: var(--bg); color: var(--text); }
+        [data-theme="dark"] header { background: #1565c0; }
+        [data-theme="dark"] .form-section { background: #16181b; }
+        [data-theme="dark"] .form-group input,
+        [data-theme="dark"] .form-group textarea,
+        [data-theme="dark"] .form-group select {
+            background: #16181b;
+            color: var(--text);
+            border-color: var(--border);
+        }
+        [data-theme="dark"] .form-group input::placeholder,
+        [data-theme="dark"] .form-group textarea::placeholder { color: var(--text-secondary); }
+        [data-theme="dark"] .logs-table th { background: #16181b; }
+        [data-theme="dark"] .logs-table tr:hover td { background: #16181b; }
+        [data-theme="dark"] .resolve-preview,
+        [data-theme="dark"] .details-block { background: #16181b; color: var(--text); }
+        [data-theme="dark"] #dnsFormWrap,
+        [data-theme="dark"] #controllerFormWrap { background: #16181b; }
+        [data-theme="dark"] .hint code { background: #2d3035; color: var(--text-secondary); }
+        [data-theme="dark"] .btn-secondary { background: #2d3035; color: var(--text); }
+        [data-theme="dark"] .btn-secondary:hover { background: #3a3f45; }
+        [data-theme="dark"] .toggle-slider { background: #3a3f45; }
+        .theme-toggle {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0.35rem 0.5rem;
+            transition: background 0.2s;
+        }
+        .theme-toggle:hover { background: rgba(255,255,255,0.15); }
     </style>
 </head>
 <body>
@@ -384,6 +436,7 @@
                     <button class="btn btn-light" onclick="showControllerModal()">Controllers</button>
                     <button class="btn btn-light" onclick="showJobModal()">+ New Sync Job</button>
                 </div>
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark mode">&#9790;</button>
                 <img class="header-logo" src="/logo.png" alt="Application logo">
             </div>
         </div>
@@ -642,7 +695,19 @@
         custom: 'Custom',
     };
 
+    function applyTheme(dark) {
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        document.getElementById('themeToggle').textContent = dark ? '\u2600' : '\u263E';
+    }
+
+    function toggleTheme() {
+        const dark = document.documentElement.getAttribute('data-theme') !== 'dark';
+        localStorage.setItem('theme', dark ? 'dark' : 'light');
+        applyTheme(dark);
+    }
+
     async function init() {
+        applyTheme(localStorage.getItem('theme') === 'dark');
         await Promise.all([loadJobs(), loadControllers(), checkHealth()]);
         setInterval(loadJobs, 30000);
         setInterval(checkHealth, 30000);
