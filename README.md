@@ -2,8 +2,6 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/mstrhakr/go-unifi-network-list-sync/ci.yml?branch=main&label=ci)](https://github.com/mstrhakr/go-unifi-network-list-sync/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/mstrhakr/go-unifi-network-list-sync?display_name=tag)](https://github.com/mstrhakr/go-unifi-network-list-sync/releases/latest)
-[![Latest Release Downloads](https://img.shields.io/github/downloads/mstrhakr/go-unifi-network-list-sync/latest/total?label=latest%20release%20downloads)](https://github.com/mstrhakr/go-unifi-network-list-sync/releases/latest)
-[![Latest Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Fusers%2Fmstrhakr%2Fpackages%2Fcontainer%2Fgo-unifi-network-list-sync&query=%24.download_count&label=latest%20docker%20pulls&logo=docker)](https://ghcr.io/mstrhakr/go-unifi-network-list-sync)
 [![Go Report Card](https://img.shields.io/badge/go%20report-A%2B-brightgreen?logo=go)](https://goreportcard.com/report/github.com/mstrhakr/go-unifi-network-list-sync)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mstrhakr/go-unifi-network-list-sync)](https://github.com/mstrhakr/go-unifi-network-list-sync/blob/main/go.mod)
 [![License](https://img.shields.io/github/license/mstrhakr/go-unifi-network-list-sync)](LICENSE)
