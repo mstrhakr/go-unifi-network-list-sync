@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniFi Network List Sync</title>
+    <link rel="icon" type="image/png" href="/logo.png">
     <style>
         :root {
             --primary: #1565c0;
@@ -45,6 +46,23 @@
             justify-content: space-between;
             align-items: center;
             height: 56px;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .header-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .header-logo {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.15);
+            padding: 3px;
         }
         header h1 { font-size: 1.25rem; font-weight: 500; }
         main {
@@ -344,6 +362,14 @@
             .job-grid { grid-template-columns: 1fr; }
             .form-row { grid-template-columns: 1fr; }
             .modal-content { width: 95%; }
+            .header-actions .btn {
+                padding: 0.45rem 0.7rem;
+                font-size: 0.8rem;
+            }
+            .header-logo {
+                width: 28px;
+                height: 28px;
+            }
         }
         .hidden { display: none !important; }
     </style>
@@ -352,10 +378,13 @@
     <header>
         <div class="header-content">
             <h1>UniFi Network List Sync</h1>
-            <div style="display:flex;gap:0.5rem;">
-                <button class="btn btn-light" onclick="showDNSModal()">DNS Servers</button>
-                <button class="btn btn-light" onclick="showControllerModal()">Controllers</button>
-                <button class="btn btn-light" onclick="showJobModal()">+ New Sync Job</button>
+            <div class="header-right">
+                <div class="header-actions">
+                    <button class="btn btn-light" onclick="showDNSModal()">DNS Servers</button>
+                    <button class="btn btn-light" onclick="showControllerModal()">Controllers</button>
+                    <button class="btn btn-light" onclick="showJobModal()">+ New Sync Job</button>
+                </div>
+                <img class="header-logo" src="/logo.png" alt="Application logo">
             </div>
         </div>
     </header>
