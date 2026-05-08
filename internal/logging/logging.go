@@ -265,7 +265,6 @@ func GetManager() *Manager {
 // It closes existing file/syslog connections and opens new ones as needed.
 func (m *Manager) Configure(cfg Config) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	// Stop background helpers tied to prior outputs.
 	m.stopRotationWatcherLocked()
@@ -375,10 +374,14 @@ func (m *Manager) Configure(cfg Config) error {
 	// then directly enqueues into the ring (no async byte channels).
 	m.rebuildLoggerLocked()
 	m.startRotationWatcherLocked()
+	logger := m.logger
+	m.mu.Unlock()
 
 	// Emit warnings (now that workers are running).
 	for _, warning := range warnings {
-		m.logger.Warn("Logging configuration warning", "category", "logging.config", "detail", warning)
+		if logger != nil {
+			logger.Warn("Logging configuration warning", "category", "logging.config", "detail", warning)
+		}
 	}
 
 	return nil

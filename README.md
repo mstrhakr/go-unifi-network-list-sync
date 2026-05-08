@@ -89,10 +89,50 @@ The container defaults to:
 
 Use a bind mount or named volume for `/data` so DB and logs persist across upgrades.
 
+### Unraid Permissions (Optional)
+
+For Unraid-style deployments, you can run the process as a specific user/group
+and set file mode defaults with environment variables:
+
+- `PUID`: runtime user ID (for example `99`)
+- `PGID`: runtime group ID (for example `100`)
+- `UMASK`: process umask (for example `002`)
+
+Example:
+
+```bash
+docker run --rm -p 8080:8080 \
+   -e PUID=99 \
+   -e PGID=100 \
+   -e UMASK=002 \
+   -v unifi-sync-data:/data \
+   ghcr.io/mstrhakr/go-unifi-network-list-sync:main
+```
+
 ### Optional: Build The Image Locally
 
 ```bash
 docker build -t go-unifi-network-list-sync:dev .
+```
+
+### Optional: Docker Compose Example
+
+Full example file: `docs/docker-compose.unraid.yml`
+
+```yaml
+services:
+   go-unifi-network-list-sync:
+      image: ghcr.io/mstrhakr/go-unifi-network-list-sync:main
+      container_name: go-unifi-network-list-sync
+      restart: unless-stopped
+      ports:
+         - "8080:8080"
+      environment:
+         PUID: "99"
+         PGID: "100"
+         UMASK: "022"
+      volumes:
+         - /mnt/user/appdata/go-unifi-network-list-sync:/data
 ```
 
 ### Optional: Run From Binary

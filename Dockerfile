@@ -22,14 +22,17 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -o /out/go-unifi-network-list-sync \
       .
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:3.22
+
+RUN apk add --no-cache su-exec
 
 WORKDIR /data
 
 COPY --from=builder /out/go-unifi-network-list-sync /go-unifi-network-list-sync
+COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
 VOLUME ["/data"]
 EXPOSE 8080
 
-ENTRYPOINT ["/go-unifi-network-list-sync"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["-addr", ":8080", "-db", "/data/sync.db", "-log-file", "/data/sync.log"]

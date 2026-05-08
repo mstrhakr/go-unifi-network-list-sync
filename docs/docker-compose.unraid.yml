@@ -1,0 +1,13 @@
+services:
+  go-unifi-network-list-sync:
+    image: ghcr.io/mstrhakr/go-unifi-network-list-sync:main
+    container_name: go-unifi-network-list-sync
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PUID: "99"
+      PGID: "100"
+      UMASK: "022"
+    volumes:
+      - /mnt/user/appdata/go-unifi-network-list-sync:/data
